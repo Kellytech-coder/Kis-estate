@@ -58,7 +58,7 @@ export default function AdminLoginPage() {
               <Building2 className="w-5 h-5" />
             </div>
             <span className="text-2xl font-black tracking-tight text-white">
-              Haven<span className="text-indigo-400">Admin</span>
+              Kis<span className="text-indigo-400">Admin</span>
             </span>
           </div>
 
@@ -161,7 +161,7 @@ export default function AdminLoginPage() {
             className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to HavenEstate Public Site</span>
+            <span>Return to KisEstate Public Site</span>
           </Link>
         </div>
       </div>
