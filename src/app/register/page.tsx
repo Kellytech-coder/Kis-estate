@@ -9,8 +9,6 @@ import {
   Lock,
   User,
   ArrowRight,
-  Briefcase,
-  Home,
 } from "lucide-react";
 import { usePropertyStore } from "@/store/propertyStore";
 
@@ -21,7 +19,6 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
   const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -31,12 +28,8 @@ export default function RegisterPage() {
 
     setLoading(true);
     setTimeout(() => {
-      login(email, role, name || "New Member");
-      if (role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
-      }
+      login(email, "user", name || "New Member");
+      router.push("/dashboard");
     }, 400);
   };
 
@@ -57,52 +50,8 @@ export default function RegisterPage() {
             Create an Account
           </h2>
           <p className="text-xs text-gray-500">
-            Join HavenEstate to save luxury favorites, book private tours, or list your portfolio.
+            Join HavenEstate to save luxury favorites and book private tours.
           </p>
-        </div>
-
-        {/* Account Type Selector */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold uppercase text-gray-600">
-            I am joining as:
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setRole("user")}
-              className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                role === "user"
-                  ? "bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500"
-                  : "border-gray-200 hover:bg-gray-50 text-gray-700"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold">
-                <Home className="w-4 h-4 text-indigo-600" />
-                Buyer / Renter
-              </div>
-              <span className="text-[11px] text-gray-500">
-                Browse & tour homes
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRole("admin")}
-              className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                role === "admin"
-                  ? "bg-indigo-50 border-indigo-500 text-indigo-900 ring-1 ring-indigo-500"
-                  : "border-gray-200 hover:bg-gray-50 text-gray-700"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 text-xs font-bold">
-                <Briefcase className="w-4 h-4 text-indigo-600" />
-                Owner / Agent
-              </div>
-              <span className="text-[11px] text-gray-500">
-                List & manage properties
-              </span>
-            </button>
-          </div>
         </div>
 
         {/* Form */}
@@ -204,4 +153,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

@@ -32,15 +32,10 @@ export default function LoginPage() {
     }, 400);
   };
 
-  const handleDemoLogin = (role: "user" | "admin") => {
+  const handleDemoLogin = () => {
     setLoading(true);
-    if (role === "admin") {
-      login("alex.admin@havenestate.com", "admin", "Alex Realtor (Admin)");
-      router.push("/admin");
-    } else {
-      login("jane.buyer@example.com", "user", "Jane Buyer");
-      router.push("/dashboard");
-    }
+    login("jane.buyer@example.com", "user", "Jane Buyer");
+    router.push("/dashboard");
   };
 
   return (
@@ -70,20 +65,13 @@ export default function LoginPage() {
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
             <span>Instant Demo Logins</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div>
             <button
               type="button"
-              onClick={() => handleDemoLogin("user")}
+              onClick={handleDemoLogin}
               className="px-3 py-2 bg-white hover:bg-gray-50 text-indigo-700 text-xs font-semibold rounded-xl border border-indigo-200 shadow-sm transition-all"
             >
               Client Demo
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoLogin("admin")}
-              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
-            >
-              Admin Demo
             </button>
           </div>
         </div>
@@ -178,4 +166,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
