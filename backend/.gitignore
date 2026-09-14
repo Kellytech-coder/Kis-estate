@@ -1,5 +1,30 @@
+# Dependencies
 node_modules/
-dist/
+
+# Environment variables
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Prisma - no longer used
+prisma/
+
+node_modules/
+.env
+firebase-service-account.json

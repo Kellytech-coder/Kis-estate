@@ -1,28 +1,72 @@
 import { createHash, randomUUID } from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 
-import { env } from "../config/env.js";
-
 export type AccessTokenPayload = {
   sub: string;
   sid: string;
   role: "USER" | "ADMIN";
 };
 
-export function createAccessToken(payload: AccessTokenPayload) {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-    expiresIn: env.JWT_ACCESS_TTL as SignOptions["expiresIn"],
+/**
+ * Get the JWT access secret from environment variables.
+ */
+function getAccessTokenSecret(): string {
+  const secret = process.env.JWT_ACCESS_SECRET;
+
+  if (!secret) {
+    throw new Error(
+      "JWT_ACCESS_SECRET is missing from the environment variables."
+    );
+  }
+
+  return secret;
+}
+
+/**
+ * Get the JWT access-token lifetime.
+ *
+ * Defaults to 15 minutes if JWT_ACCESS_TTL is not provided.
+ */
+function getAccessTokenTTL(): SignOptions["expiresIn"] {
+  return (process.env.JWT_ACCESS_TTL || "15m") as SignOptions["expiresIn"];
+}
+
+/**
+ * Create a JWT access token.
+ */
+export function createAccessToken(
+  payload: AccessTokenPayload
+): string {
+  return jwt.sign(payload, getAccessTokenSecret(), {
+    expiresIn: getAccessTokenTTL(),
   });
 }
 
-export function verifyAccessToken(token: string) {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
+/**
+ * Verify a JWT access token.
+ */
+export function verifyAccessToken(
+  token: string
+): AccessTokenPayload {
+  return jwt.verify(
+    token,
+    getAccessTokenSecret()
+  ) as AccessTokenPayload;
 }
 
-export function newOpaqueToken() {
+/**
+ * Generate a secure random opaque token.
+ */
+export function newOpaqueToken(): string {
   return randomUUID();
 }
 
-export function hashToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
+/**
+ * Create a SHA-256 hash of a token.
+ */
+export function hashToken(token: string): string {
+  return createHash("sha256")
+    .update(token)
+    .digest("hex");
 }
+

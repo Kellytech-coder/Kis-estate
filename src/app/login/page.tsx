@@ -48,7 +48,7 @@ export default function LoginPage() {
               <Building2 className="w-5 h-5" />
             </div>
             <span className="text-2xl font-bold tracking-tight text-gray-900">
-              Haven<span className="text-indigo-600">Estate</span>
+              KIS<span className="text-indigo-600">Estate</span>
             </span>
           </Link>
           <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
