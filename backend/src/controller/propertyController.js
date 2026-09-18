@@ -2,60 +2,132 @@ const { db, admin } = require("../config/firebase");
 
 const propertiesCollection = db.collection("properties");
 
+// Helper to normalize property document output
+const formatPropertyDoc = (doc) => {
+  const data = doc.data();
+  const id = doc.id;
+
+  const createdAt =
+    data.createdAt?.toDate?.()?.toISOString?.() ||
+    data.createdAt ||
+    new Date().toISOString();
+
+  const updatedAt =
+    data.updatedAt?.toDate?.()?.toISOString?.() ||
+    data.updatedAt ||
+    new Date().toISOString();
+
+  return {
+    id,
+    title: data.title || "",
+    description: data.description || "",
+    price: Number(data.price) || 0,
+    type: data.type || data.listingType || "buy",
+    propertyType: data.propertyType || "house",
+    location: data.location || {
+      address: data.address || "",
+      city: data.city || "",
+      state: data.state || "",
+      zipCode: data.zipCode || data.postalCode || "",
+      country: data.country || "USA",
+    },
+    bedrooms: Number(data.bedrooms) || 0,
+    bathrooms: Number(data.bathrooms) || 0,
+    areaSqFt: Number(data.areaSqFt) || 0,
+    yearBuilt: Number(data.yearBuilt) || new Date().getFullYear(),
+    images: Array.isArray(data.images) && data.images.length > 0 ? data.images : [],
+    featured: Boolean(data.featured),
+    amenities: Array.isArray(data.amenities) ? data.amenities : [],
+    status: (data.status || "available").toLowerCase(),
+    agent: data.agent || {
+      name: "Marcus Vance",
+      email: "marcus.vance@havenestate.com",
+      phone: "+1 (310) 555-0192",
+      avatar:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      agency: "Haven Luxury Real Estate",
+    },
+    createdAt,
+    updatedAt,
+  };
+};
+
+// ========================================
+// GET ALL PROPERTIES
+// ========================================
 const getProperties = async (req, res, next) => {
   try {
     const {
+      type,
       listingType,
-      status,
       propertyType,
       featured,
-      locationId,
       city,
+      minPrice,
+      maxPrice,
+      search,
     } = req.query;
 
-    let query = propertiesCollection;
+    const snapshot = await propertiesCollection.get();
 
-    if (listingType) {
-      query = query.where("listingType", "==", listingType);
-    }
+    let properties = snapshot.docs.map(formatPropertyDoc);
 
-    if (status) {
-      query = query.where("status", "==", status);
-    }
-
-    if (propertyType) {
-      query = query.where("propertyType", "==", propertyType);
-    }
-
-    if (featured !== undefined) {
-      query = query.where("featured", "==", featured === "true");
-    }
-
-    if (locationId) {
-      query = query.where("locationId", "==", locationId);
-    }
-
-    const snapshot = await query.get();
-
-    let properties = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    if (city) {
-      const normalizedCity = city.toLowerCase();
-
+    const filterType = type || listingType;
+    if (filterType && filterType !== "all") {
       properties = properties.filter(
-        (property) =>
-          property.location?.city?.toLowerCase() === normalizedCity
+        (p) => p.type.toLowerCase() === filterType.toLowerCase()
       );
     }
 
-    properties.sort((a, b) => {
-      const aDate = a.createdAt?.toMillis?.() || 0;
-      const bDate = b.createdAt?.toMillis?.() || 0;
+    if (propertyType && propertyType !== "all") {
+      properties = properties.filter(
+        (p) => p.propertyType.toLowerCase() === propertyType.toLowerCase()
+      );
+    }
 
-      return bDate - aDate;
+    if (featured !== undefined) {
+      const isFeatured = featured === "true" || featured === true;
+      properties = properties.filter((p) => p.featured === isFeatured);
+    }
+
+    if (city && city !== "all") {
+      const normalizedCity = city.toLowerCase().trim();
+      properties = properties.filter(
+        (p) => p.location?.city?.toLowerCase()?.trim() === normalizedCity
+      );
+    }
+
+    if (minPrice !== undefined && minPrice !== null && minPrice !== "") {
+      const min = Number(minPrice);
+      if (!isNaN(min)) {
+        properties = properties.filter((p) => p.price >= min);
+      }
+    }
+
+    if (maxPrice !== undefined && maxPrice !== null && maxPrice !== "") {
+      const max = Number(maxPrice);
+      if (!isNaN(max)) {
+        properties = properties.filter((p) => p.price <= max);
+      }
+    }
+
+    if (search && search.trim()) {
+      const q = search.toLowerCase().trim();
+      properties = properties.filter((p) => {
+        const titleMatch = p.title.toLowerCase().includes(q);
+        const descMatch = p.description.toLowerCase().includes(q);
+        const cityMatch = p.location?.city?.toLowerCase().includes(q);
+        const addrMatch = p.location?.address?.toLowerCase().includes(q);
+        const amenityMatch = p.amenities.some((a) => a.toLowerCase().includes(q));
+        return titleMatch || descMatch || cityMatch || addrMatch || amenityMatch;
+      });
+    }
+
+    // Sort newest first
+    properties.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime() || 0;
+      const dateB = new Date(b.createdAt).getTime() || 0;
+      return dateB - dateA;
     });
 
     res.json({
@@ -68,11 +140,14 @@ const getProperties = async (req, res, next) => {
   }
 };
 
+// ========================================
+// GET ONE PROPERTY
+// ========================================
 const getProperty = async (req, res, next) => {
   try {
-    const snapshot = await propertiesCollection.doc(req.params.id).get();
+    const doc = await propertiesCollection.doc(req.params.id).get();
 
-    if (!snapshot.exists) {
+    if (!doc.exists) {
       return res.status(404).json({
         success: false,
         message: "Property not found",
@@ -81,110 +156,113 @@ const getProperty = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: {
-        id: snapshot.id,
-        ...snapshot.data(),
-      },
+      data: formatPropertyDoc(doc),
     });
   } catch (error) {
     next(error);
   }
 };
 
+// ========================================
+// CREATE PROPERTY
+// ========================================
 const createProperty = async (req, res, next) => {
   try {
     const {
       title,
-      slug,
       description,
       price,
-      currency = "USD",
+      type,
       listingType,
       propertyType,
-      status = "AVAILABLE",
-      bedrooms = null,
-      bathrooms = null,
-      areaSqFt = null,
-      yearBuilt = null,
+      location,
+      address,
+      city,
+      state,
+      zipCode,
+      country,
+      bedrooms = 0,
+      bathrooms = 0,
+      areaSqFt = 0,
+      yearBuilt = new Date().getFullYear(),
       featured = false,
-      publishedAt = null,
-      locationId,
+      status = "available",
       images = [],
       amenities = [],
+      agent,
     } = req.body;
 
-    if (
-      !title ||
-      !slug ||
-      !description ||
-      price === undefined ||
-      !listingType ||
-      !propertyType ||
-      !locationId
-    ) {
+    if (!title || price === undefined) {
       return res.status(400).json({
         success: false,
-        message:
-          "title, slug, description, price, listingType, propertyType and locationId are required",
+        message: "Title and price are required",
       });
     }
 
-    const existingSlug = await propertiesCollection
-      .where("slug", "==", slug)
-      .limit(1)
-      .get();
+    const resolvedType = type || listingType || "buy";
+    const resolvedPropertyType = propertyType || "house";
 
-    if (!existingSlug.empty) {
-      return res.status(409).json({
-        success: false,
-        message: "A property with this slug already exists",
-      });
-    }
+    const resolvedLocation = location || {
+      address: address || "",
+      city: city || "",
+      state: state || "",
+      zipCode: zipCode || "",
+      country: country || "USA",
+    };
+
+    const resolvedAgent = agent || {
+      name: req.userProfile?.name || "Marcus Vance",
+      email: req.userProfile?.email || "marcus.vance@havenestate.com",
+      phone: "+1 (310) 555-0192",
+      avatar:
+        req.userProfile?.photoURL ||
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      agency: "Haven Luxury Real Estate",
+    };
 
     const propertyRef = propertiesCollection.doc();
 
-    const property = {
-      title,
-      slug,
-      description,
+    const newProperty = {
+      title: title.trim(),
+      description: description ? description.trim() : "",
       price: Number(price),
-      currency,
-      listingType,
-      propertyType,
-      status,
-      bedrooms: bedrooms !== null ? Number(bedrooms) : null,
-      bathrooms: bathrooms !== null ? Number(bathrooms) : null,
-      areaSqFt: areaSqFt !== null ? Number(areaSqFt) : null,
-      yearBuilt: yearBuilt !== null ? Number(yearBuilt) : null,
+      type: resolvedType,
+      listingType: resolvedType,
+      propertyType: resolvedPropertyType,
+      location: resolvedLocation,
+      bedrooms: Number(bedrooms) || 0,
+      bathrooms: Number(bathrooms) || 0,
+      areaSqFt: Number(areaSqFt) || 0,
+      yearBuilt: Number(yearBuilt) || new Date().getFullYear(),
       featured: Boolean(featured),
-      publishedAt: publishedAt
-        ? new Date(publishedAt)
-        : null,
-      locationId,
+      status: status.toLowerCase(),
+      images: Array.isArray(images) && images.length > 0 ? images : [
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"
+      ],
+      amenities: Array.isArray(amenities) ? amenities : [],
+      agent: resolvedAgent,
       createdById: req.user.uid,
-      images,
-      amenities,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    await propertyRef.set(property);
+    await propertyRef.set(newProperty);
 
     const createdSnapshot = await propertyRef.get();
 
     res.status(201).json({
       success: true,
       message: "Property created successfully",
-      data: {
-        id: createdSnapshot.id,
-        ...createdSnapshot.data(),
-      },
+      data: formatPropertyDoc(createdSnapshot),
     });
   } catch (error) {
     next(error);
   }
 };
 
+// ========================================
+// UPDATE PROPERTY
+// ========================================
 const updateProperty = async (req, res, next) => {
   try {
     const propertyRef = propertiesCollection.doc(req.params.id);
@@ -197,51 +275,17 @@ const updateProperty = async (req, res, next) => {
       });
     }
 
-    const existingProperty = snapshot.data();
+    const updates = { ...req.body };
 
-    const isOwner =
-      existingProperty.createdById === req.user.uid;
+    // Format numbers if provided
+    if (updates.price !== undefined) updates.price = Number(updates.price);
+    if (updates.bedrooms !== undefined) updates.bedrooms = Number(updates.bedrooms);
+    if (updates.bathrooms !== undefined) updates.bathrooms = Number(updates.bathrooms);
+    if (updates.areaSqFt !== undefined) updates.areaSqFt = Number(updates.areaSqFt);
+    if (updates.yearBuilt !== undefined) updates.yearBuilt = Number(updates.yearBuilt);
+    if (updates.featured !== undefined) updates.featured = Boolean(updates.featured);
 
-    const isAdmin =
-      req.userProfile?.role === "ADMIN";
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to update this property",
-      });
-    }
-
-    const allowedFields = [
-      "title",
-      "slug",
-      "description",
-      "price",
-      "currency",
-      "listingType",
-      "propertyType",
-      "status",
-      "bedrooms",
-      "bathrooms",
-      "areaSqFt",
-      "yearBuilt",
-      "featured",
-      "publishedAt",
-      "locationId",
-      "images",
-      "amenities",
-    ];
-
-    const updates = {};
-
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
-      }
-    }
-
-    updates.updatedAt =
-      admin.firestore.FieldValue.serverTimestamp();
+    updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
     await propertyRef.update(updates);
 
@@ -250,16 +294,16 @@ const updateProperty = async (req, res, next) => {
     res.json({
       success: true,
       message: "Property updated successfully",
-      data: {
-        id: updatedSnapshot.id,
-        ...updatedSnapshot.data(),
-      },
+      data: formatPropertyDoc(updatedSnapshot),
     });
   } catch (error) {
     next(error);
   }
 };
 
+// ========================================
+// DELETE PROPERTY
+// ========================================
 const deleteProperty = async (req, res, next) => {
   try {
     const propertyRef = propertiesCollection.doc(req.params.id);
@@ -269,18 +313,6 @@ const deleteProperty = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Property not found",
-      });
-    }
-
-    const property = snapshot.data();
-
-    const isOwner = property.createdById === req.user.uid;
-    const isAdmin = req.userProfile?.role === "ADMIN";
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to delete this property",
       });
     }
 

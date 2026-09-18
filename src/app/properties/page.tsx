@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   LayoutGrid,
   List,
@@ -8,17 +8,34 @@ import {
   X,
   SearchX,
   RotateCcw,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import PropertyCard from "@/components/PropertyCard";
 import PropertyFilter from "@/components/PropertyFilter";
 import { usePropertyStore } from "@/store/propertyStore";
 
 export default function PropertiesPage() {
-  const { properties, filters, resetFilters } = usePropertyStore();
+  const {
+    properties,
+    isLoadingProperties,
+    propertiesError,
+    fetchProperties,
+    filters,
+    resetFilters,
+  } = usePropertyStore();
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // Apply filters and sorting
+  // Re-fetch on mount if empty
+  useEffect(() => {
+    if (properties.length === 0) {
+      void fetchProperties();
+    }
+  }, [fetchProperties, properties.length]);
+
+  // Apply client-side filters and sorting
   const filteredProperties = useMemo(() => {
     return properties
       .filter((prop) => {
@@ -27,9 +44,9 @@ export default function PropertiesPage() {
           const q = filters.search.toLowerCase();
           const matchTitle = prop.title.toLowerCase().includes(q);
           const matchDesc = prop.description.toLowerCase().includes(q);
-          const matchCity = prop.location.city.toLowerCase().includes(q);
-          const matchAddr = prop.location.address.toLowerCase().includes(q);
-          const matchAmenity = prop.amenities.some((a) =>
+          const matchCity = prop.location?.city?.toLowerCase()?.includes(q);
+          const matchAddr = prop.location?.address?.toLowerCase()?.includes(q);
+          const matchAmenity = prop.amenities?.some((a) =>
             a.toLowerCase().includes(q)
           );
           if (
@@ -57,7 +74,7 @@ export default function PropertiesPage() {
         }
 
         // City
-        if (filters.city !== "all" && prop.location.city !== filters.city) {
+        if (filters.city !== "all" && prop.location?.city !== filters.city) {
           return false;
         }
 
@@ -94,68 +111,46 @@ export default function PropertiesPage() {
       .sort((a, b) => {
         if (filters.sortBy === "price-asc") return a.price - b.price;
         if (filters.sortBy === "price-desc") return b.price - a.price;
-        if (filters.sortBy === "newest")
-          return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        // default "featured": featured items first, then newer
-        if (a.featured && !b.featured) return -1;
-        if (!a.featured && b.featured) return 1;
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+        if (filters.sortBy === "newest") {
+          const dateA = new Date(a.createdAt).getTime() || 0;
+          const dateB = new Date(b.createdAt).getTime() || 0;
+          return dateB - dateA;
+        }
+        return b.featured ? 1 : -1;
       });
   }, [properties, filters]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Top Banner / Heading */}
-      <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-          Explore Properties
-        </h1>
-        <p className="text-gray-600 text-sm mt-1">
-          Browse luxury homes, penthouses, and private estates available for sale
-          and rent.
-        </p>
-      </div>
-
-      {/* Controls Bar: Count, Mobile filter toggle, View mode switcher */}
-      <div className="flex items-center justify-between gap-4 pb-6 mb-8 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">
-            Showing {filteredProperties.length}{" "}
-            {filteredProperties.length === 1 ? "Property" : "Properties"}
-          </span>
-          {filters.type !== "all" && (
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 capitalize">
-              {filters.type === "buy" ? "For Sale" : "For Rent"}
-            </span>
-          )}
-          {filters.city !== "all" && (
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">
-              {filters.city}
-            </span>
-          )}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+            Explore Properties
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Discover verified luxury estates, modern penthouses, and architectural homes.
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* View Switcher & Mobile Filter Trigger */}
+        <div className="flex items-center gap-3 self-end sm:self-auto">
           {/* Mobile Filter Button */}
           <button
             onClick={() => setMobileFilterOpen(true)}
-            className="lg:hidden flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+            className="lg:hidden flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 font-semibold rounded-xl text-xs border border-indigo-100"
           >
-            <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
-            Filters
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>Filters</span>
           </button>
 
-          {/* View Mode Toggle (Grid vs List) */}
-          <div className="hidden sm:flex items-center bg-gray-100 p-1 rounded-xl">
+          {/* Grid / List View Toggles */}
+          <div className="flex items-center bg-gray-100 p-1 rounded-xl">
             <button
               onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
                 viewMode === "grid"
-                  ? "bg-white text-indigo-600 shadow-sm"
+                  ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-900"
               }`}
               title="Grid View"
@@ -164,9 +159,9 @@ export default function PropertiesPage() {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-lg text-xs font-semibold transition-all ${
                 viewMode === "list"
-                  ? "bg-white text-indigo-600 shadow-sm"
+                  ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-900"
               }`}
               title="List View"
@@ -177,79 +172,144 @@ export default function PropertiesPage() {
         </div>
       </div>
 
-      {/* Main Content Layout (Sidebar + Grid) */}
+      {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         {/* Desktop Filter Sidebar */}
-        <aside className="hidden lg:block lg:col-span-1 sticky top-28">
+        <div className="hidden lg:block lg:col-span-1 sticky top-28">
           <PropertyFilter />
-        </aside>
+        </div>
 
-        {/* Mobile Filter Modal */}
-        {mobileFilterOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden flex justify-end bg-black/50 backdrop-blur-sm">
-            <div className="w-full max-w-sm bg-white h-full overflow-y-auto p-6 space-y-4 animate-in slide-in-from-right duration-300">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-200">
-                <h3 className="font-bold text-gray-900">Filters</h3>
-                <button
-                  onClick={() => setMobileFilterOpen(false)}
-                  className="p-1.5 text-gray-500 hover:text-gray-800"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <PropertyFilter />
+        {/* Properties Grid / Results Area */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Active Count & Quick Reset */}
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>
+              Showing{" "}
+              <strong className="text-gray-900">
+                {filteredProperties.length}
+              </strong>{" "}
+              properties
+            </span>
+            {(filters.search ||
+              filters.type !== "all" ||
+              filters.propertyType !== "all" ||
+              filters.city !== "all" ||
+              filters.minPrice !== null ||
+              filters.maxPrice !== null) && (
               <button
-                onClick={() => setMobileFilterOpen(false)}
-                className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-xl text-center shadow"
+                onClick={resetFilters}
+                className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
               >
-                Apply & View Results
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset All Filters</span>
+              </button>
+            )}
+          </div>
+
+          {/* Error Banner */}
+          {propertiesError && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-700 text-xs">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{propertiesError}</span>
+              </div>
+              <button
+                onClick={() => void fetchProperties()}
+                className="font-bold underline cursor-pointer"
+              >
+                Retry
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Property Grid or Empty State */}
-        <div className="lg:col-span-3">
-          {filteredProperties.length > 0 ? (
+          {/* Loading State */}
+          {isLoadingProperties && properties.length === 0 ? (
+            <div className="py-24 text-center space-y-4">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+              <p className="text-xs text-gray-500 font-medium">
+                Fetching properties from database...
+              </p>
+            </div>
+          ) : filteredProperties.length === 0 ? (
+            /* Empty State */
+            <div className="py-20 text-center space-y-4 bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <SearchX className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-gray-900">
+                  No Properties Match Your Search
+                </h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                  Try adjusting your price range, city, or property type filters to explore more available estates.
+                </p>
+              </div>
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-200 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Clear All Filters</span>
+              </button>
+            </div>
+          ) : (
+            /* Properties List / Grid */
             <div
               className={
                 viewMode === "grid"
-                  ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
-                  : "space-y-6"
+                  ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6"
+                  : "flex flex-col gap-6"
               }
             >
               {filteredProperties.map((property) => (
                 <PropertyCard
                   key={property.id}
                   property={property}
-                  className={viewMode === "list" ? "sm:flex-row sm:aspect-auto" : ""}
                 />
               ))}
-            </div>
-          ) : (
-            <div className="py-20 px-6 text-center bg-white rounded-2xl border border-dashed border-gray-300 space-y-4">
-              <div className="w-14 h-14 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto">
-                <SearchX className="w-7 h-7" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">
-                No properties match your filters
-              </h3>
-              <p className="text-sm text-gray-500 max-w-md mx-auto">
-                Try widening your price range, choosing different bedroom options,
-                or removing specific location filters.
-              </p>
-              <button
-                onClick={resetFilters}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Clear All Filters
-              </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Filter Drawer / Modal */}
+      {mobileFilterOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setMobileFilterOpen(false)}
+          />
+
+          {/* Drawer Content */}
+          <div className="relative w-full max-w-xs bg-white h-full shadow-2xl p-6 overflow-y-auto z-10 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+                <h3 className="font-bold text-gray-900 text-base">
+                  Filter Properties
+                </h3>
+                <button
+                  onClick={() => setMobileFilterOpen(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <PropertyFilter />
+            </div>
+
+            <div className="pt-6 border-t border-gray-100 mt-6">
+              <button
+                onClick={() => setMobileFilterOpen(false)}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-200 transition-all"
+              >
+                Apply &amp; View {filteredProperties.length} Properties
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

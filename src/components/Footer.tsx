@@ -8,6 +8,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Award,
+  Lock,
 } from "lucide-react";
 
 export default function Footer() {
@@ -85,10 +86,11 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/admin"
-                  className="hover:text-white transition-colors"
+                  href="/admin/login"
+                  className="hover:text-indigo-300 text-gray-400 transition-colors inline-flex items-center gap-1"
                 >
-                  Property Manager Portal
+                  <Lock className="w-3 h-3" />
+                  <span>Staff Portal</span>
                 </Link>
               </li>
             </ul>
@@ -99,18 +101,10 @@ export default function Footer() {
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">
               Top Markets
             </h4>
-            <ul className="space-y-2.5 text-sm">
+            <ul className="space-y-2.5 text-sm text-gray-400">
               <li>
                 <Link
-                  href="/properties?city=New York"
-                  className="hover:text-white transition-colors"
-                >
-                  New York, NY
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/properties?city=Beverly Hills"
+                  href="/properties?city=Beverly+Hills"
                   className="hover:text-white transition-colors"
                 >
                   Beverly Hills, CA
@@ -118,10 +112,18 @@ export default function Footer() {
               </li>
               <li>
                 <Link
+                  href="/properties?city=New+York"
+                  className="hover:text-white transition-colors"
+                >
+                  Manhattan &amp; Brooklyn, NY
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/properties?city=Miami"
                   className="hover:text-white transition-colors"
                 >
-                  Miami, FL
+                  Miami &amp; South Beach, FL
                 </Link>
               </li>
               <li>
@@ -129,82 +131,65 @@ export default function Footer() {
                   href="/properties?city=Austin"
                   className="hover:text-white transition-colors"
                 >
-                  Austin, TX
+                  Austin &amp; Hill Country, TX
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/properties?city=San Francisco"
+                  href="/properties?city=San+Francisco"
                   className="hover:text-white transition-colors"
                 >
-                  San Francisco, CA
+                  San Francisco Bay Area, CA
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Newsletter Subscribe */}
+          {/* Newsletter */}
           <div className="space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Exclusive Insights
+              Private Curations
             </h4>
-            <p className="text-xs text-gray-400">
-              Get the latest curated private listings and quarterly real estate
-              market reports directly to your inbox.
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Receive confidential off-market briefings and new architectural listings weekly.
             </p>
             {subscribed ? (
-              <div className="flex items-center gap-2 p-3 bg-emerald-950/60 border border-emerald-800/50 rounded-lg text-emerald-300 text-xs">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Thank you! You are subscribed to private market insights.</span>
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Subscribed to private curations.</span>
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="space-y-2">
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    className="absolute right-1.5 top-1.5 p-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors"
-                    aria-label="Subscribe"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
+                <input
+                  type="email"
+                  required
+                  placeholder="advisor@firm.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  <span>Join Exclusive Access</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </form>
             )}
-            <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
-              <span>Direct inquiries:</span>
-              <a
-                href="mailto:concierge@havenestate.com"
-                className="text-gray-400 hover:text-white underline underline-offset-2"
-              >
-                concierge@havenestate.com
-              </a>
-            </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} HavenEstate Luxury Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} KIS-Estate Inc. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <span>Equal Housing Opportunity</span>
-            <Link href="#" className="hover:text-gray-400 transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="#" className="hover:text-gray-400 transition-colors">
-              Terms of Service
-            </Link>
+            <span className="hover:text-gray-400 transition-colors">Privacy Policy</span>
+            <span className="hover:text-gray-400 transition-colors">Terms of Service</span>
+            <span className="hover:text-gray-400 transition-colors">Equal Housing Opportunity</span>
           </div>
         </div>
       </div>
     </footer>
   );
 }
-

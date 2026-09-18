@@ -4,8 +4,9 @@
   "description": "Express.js backend for property listing application using Firebase",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon src/server.js",
+    "dev": "node src/server.js",
     "start": "node src/server.js",
+    "seed": "node scripts/seedFirestore.js",
     "create-admin": "node scripts/createAdmin.js"
   },
   "dependencies": {

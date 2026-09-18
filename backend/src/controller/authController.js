@@ -18,97 +18,56 @@ const login = async (req, res) => {
     const decodedToken = await auth.verifyIdToken(idToken);
     const uid = decodedToken.uid;
 
-    console.log("========================================");
-    console.log("Firebase UID:", uid);
-    console.log("========================================");
-
     // Get Firebase Authentication user
     const userRecord = await auth.getUser(uid);
 
-    // Find Firestore user profile
-    const userRef = db.collection("user").doc(uid);
+    // Find Firestore user profile in 'users' collection
+    const userRef = db.collection("users").doc(uid);
     const userSnapshot = await userRef.get();
 
-    const allUsers = await db.collection("user").limit(20).get();
-
-console.log("========================================");
-console.log("ALL DOCUMENTS IN user COLLECTION");
-console.log("Number of documents:", allUsers.size);
-
-allUsers.forEach((doc) => {
-  console.log("Document ID:", doc.id);
-  console.log("Document data:", doc.data());
-});
-
-console.log("========================================");
-
-    console.log("========================================");
-    console.log("Firestore lookup");
-    console.log("Collection: user");
-    console.log("Document ID:", uid);
-    console.log("Document path:", userRef.path);
-    console.log("Document exists:", userSnapshot.exists);
-    console.log("========================================");
-
-    // Profile does not exist
     if (!userSnapshot.exists) {
-      console.log(`No Firestore profile found for UID: ${uid}`);
-
       return res.status(403).json({
         success: false,
-        message:
-          "User profile not found. Please create the user profile in Firestore.",
+        message: "User profile not found. Please ensure your account has administrator privileges.",
       });
     }
 
-    // Read Firestore profile
     const profile = userSnapshot.data() || {};
-
-    console.log("Firestore profile:", profile);
-
-    const role = profile.role || "USER";
-
-    console.log("User role:", role);
+    const role = (profile.role || "USER").toUpperCase();
 
     // Only ADMIN can access admin login
     if (role !== "ADMIN") {
       return res.status(403).json({
         success: false,
-        message: "Admin access required",
+        message: "Access denied. Administrator privileges are required.",
       });
     }
 
-    // Successful admin login
+    if (profile.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Administrator account is inactive.",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "Admin login successful",
       user: {
         uid: userRecord.uid,
         email: profile.email || userRecord.email || null,
-        name:
-          profile.name ||
-          userRecord.displayName ||
-          "Administrator",
+        name: profile.name || userRecord.displayName || "Administrator",
         role: "ADMIN",
-        photoURL:
-          profile.photoURL ||
-          userRecord.photoURL ||
-          null,
+        photoURL: profile.photoURL || userRecord.photoURL || null,
       },
     });
   } catch (error) {
-    console.error("========================================");
-    console.error("LOGIN ERROR");
-    console.error(error);
-    console.error("========================================");
+    console.error("Login error:", error);
 
     return res.status(401).json({
       success: false,
       message: "Authentication failed",
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : undefined,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -118,8 +77,6 @@ console.log("========================================");
 // ========================================
 const logout = async (req, res) => {
   try {
-    res.clearCookie("token");
-
     return res.status(200).json({
       success: true,
       message: "Logout successful",
@@ -135,7 +92,7 @@ const logout = async (req, res) => {
 };
 
 // ========================================
-// GET CURRENT USER
+// GET CURRENT USER (/api/auth/me)
 // ========================================
 const getMe = async (req, res) => {
   try {
@@ -149,16 +106,18 @@ const getMe = async (req, res) => {
     }
 
     const userRecord = await auth.getUser(uid);
-
-    const userSnapshot = await db
-      .collection("user")
-      .doc(uid)
-      .get();
+    const userSnapshot = await db.collection("users").doc(uid).get();
 
     if (!userSnapshot.exists) {
-      return res.status(404).json({
-        success: false,
-        message: "User profile not found",
+      return res.status(200).json({
+        success: true,
+        user: {
+          uid: userRecord.uid,
+          email: userRecord.email || null,
+          name: userRecord.displayName || "User",
+          role: "USER",
+          photoURL: userRecord.photoURL || null,
+        },
       });
     }
 
@@ -169,15 +128,9 @@ const getMe = async (req, res) => {
       user: {
         uid: userRecord.uid,
         email: profile.email || userRecord.email || null,
-        name:
-          profile.name ||
-          userRecord.displayName ||
-          "User",
-        role: profile.role || "USER",
-        photoURL:
-          profile.photoURL ||
-          userRecord.photoURL ||
-          null,
+        name: profile.name || userRecord.displayName || "User",
+        role: (profile.role || "USER").toUpperCase(),
+        photoURL: profile.photoURL || userRecord.photoURL || null,
       },
     });
   } catch (error) {
@@ -190,9 +143,6 @@ const getMe = async (req, res) => {
   }
 };
 
-// ========================================
-// EXPORT CONTROLLERS
-// ========================================
 module.exports = {
   login,
   logout,

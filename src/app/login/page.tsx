@@ -10,32 +10,61 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Sparkles,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
-import { usePropertyStore } from "@/store/propertyStore";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = usePropertyStore();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      login(email || "client@havenestate.com", "user", "Client Account");
-      router.push("/dashboard");
-    }, 400);
-  };
+    setErrorMsg("");
 
-  const handleDemoLogin = () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      setErrorMsg("Please provide both email and password.");
+      return;
+    }
+
     setLoading(true);
-    login("jane.buyer@example.com", "user", "Jane Buyer");
-    router.push("/dashboard");
+
+    try {
+      await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      const fbErr = err as { code?: string; message?: string };
+      console.error("Login failed:", err);
+
+      switch (fbErr.code) {
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          setErrorMsg("Invalid email or password. Please try again.");
+          break;
+        case "auth/invalid-email":
+          setErrorMsg("Please enter a valid email address.");
+          break;
+        case "auth/too-many-requests":
+          setErrorMsg("Too many unsuccessful attempts. Please try again later.");
+          break;
+        case "auth/network-request-failed":
+          setErrorMsg("Network connection issue. Please check your internet.");
+          break;
+        default:
+          setErrorMsg(fbErr.message || "Failed to sign in. Please verify your credentials.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,22 +88,13 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* 1-Click Quick Demo Login Shortcuts */}
-        <div className="space-y-2 p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Instant Demo Logins</span>
+        {/* Error Alert */}
+        {errorMsg && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-700 text-xs animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="leading-relaxed font-medium">{errorMsg}</p>
           </div>
-          <div>
-            <button
-              type="button"
-              onClick={handleDemoLogin}
-              className="px-3 py-2 bg-white hover:bg-gray-50 text-indigo-700 text-xs font-semibold rounded-xl border border-indigo-200 shadow-sm transition-all"
-            >
-              Client Demo
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -100,12 +120,6 @@ export default function LoginPage() {
               <label className="block text-xs font-semibold uppercase text-gray-700">
                 Password
               </label>
-              <Link
-                href="#"
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-              >
-                Forgot password?
-              </Link>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -120,7 +134,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
               >
                 {showPassword ? (
                   <EyeOff className="w-4 h-4" />
@@ -131,36 +145,46 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-1">
-            <label className="flex items-center gap-2 cursor-pointer text-gray-600">
-              <input
-                type="checkbox"
-                defaultChecked
-                className="rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
-              />
-              <span>Remember me on this device</span>
-            </label>
-          </div>
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-100 hover:shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all cursor-pointer"
           >
-            <span>{loading ? "Signing in..." : "Sign In to Account"}</span>
-            <ArrowRight className="w-4 h-4" />
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Signing In...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 
         {/* Footer */}
-        <div className="text-center text-xs text-gray-500 pt-2 border-t border-gray-100">
-          Don&apos;t have an account yet?{" "}
-          <Link
-            href="/register"
-            className="font-semibold text-indigo-600 hover:text-indigo-700 ml-1"
-          >
-            Create an Account
-          </Link>
+        <div className="text-center pt-2 space-y-3">
+          <p className="text-xs text-gray-500">
+            Don&apos;t have an account?{" "}
+            <Link
+              href="/register"
+              className="text-indigo-600 font-semibold hover:underline"
+            >
+              Create an Account
+            </Link>
+          </p>
+
+          <p className="text-[11px] text-gray-400">
+            Staff or Estate Manager?{" "}
+            <Link
+              href="/admin/login"
+              className="text-gray-600 hover:text-indigo-600 font-medium underline"
+            >
+              Access Admin Console
+            </Link>
+          </p>
         </div>
       </div>
     </div>

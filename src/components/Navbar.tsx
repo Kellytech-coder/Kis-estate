@@ -13,6 +13,12 @@ import {
 import { usePropertyStore } from "@/store/propertyStore";
 import { useIsMounted } from "@/lib/utils";
 
+interface NavLinkItem {
+  name: string;
+  href: string;
+  badge?: string;
+}
+
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -20,6 +26,10 @@ export default function Navbar() {
 
   const pathname = usePathname();
   const { favorites, currentUser, logout } = usePropertyStore();
+
+  const isAdmin =
+    currentUser?.role === "admin" ||
+    currentUser?.role === "ADMIN";
 
   useEffect(() => {
     const handleScroll = () => {
@@ -29,13 +39,20 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const navLinks = [
+  const baseNavLinks: NavLinkItem[] = [
     { name: "Explore", href: "/properties" },
     { name: "Buy", href: "/buy" },
     { name: "Rent", href: "/rent" },
     { name: "Dashboard", href: "/dashboard" },
-    { name: "Admin Portal", href: "/admin", badge: "Portal" },
   ];
+
+  // Only append Admin Console if the authenticated user has ADMIN role
+  const navLinks: NavLinkItem[] = isAdmin
+    ? [
+        ...baseNavLinks,
+        { name: "Admin Console", href: "/admin", badge: "Admin" },
+      ]
+    : baseNavLinks;
 
   const favCount = mounted ? favorites.length : 0;
 
@@ -83,9 +100,9 @@ export default function Navbar() {
                       : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                   }`}
                 >
-                  {link.name}
+                  <span>{link.name}</span>
                   {link.badge && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-700 rounded-full">
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">
                       {link.badge}
                     </span>
                   )}
@@ -99,81 +116,74 @@ export default function Navbar() {
             {/* Favorites Counter */}
             <Link
               href="/dashboard"
-              className="relative p-2.5 rounded-full text-gray-600 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-              title="View saved properties in dashboard"
+              className="p-2.5 rounded-xl text-gray-600 hover:text-rose-600 hover:bg-rose-50/60 transition-all relative"
+              title="Saved Properties"
             >
               <Heart className="w-5 h-5" />
               {favCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-rose-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center ring-2 ring-white animate-in zoom-in-75">
+                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-in zoom-in">
                   {favCount}
                 </span>
               )}
             </Link>
 
-            <div className="h-6 w-px bg-gray-200 mx-1" />
-
-            {/* User Auth Info */}
+            {/* User Profile or Sign In */}
             {mounted && currentUser ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors"
+                  className="flex items-center gap-2 py-1.5 px-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
-                  <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
-                    {currentUser.name.charAt(0)}
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                  <div className="text-left">
-                    <span className="text-xs font-semibold text-gray-900 block leading-none">
-                      {currentUser.name.split(" ")[0]}
-                    </span>
-                    <span className="text-[10px] text-gray-500 capitalize leading-none">
-                      {currentUser.role}
-                    </span>
-                  </div>
+                  <span className="text-xs font-semibold text-gray-800 max-w-[100px] truncate">
+                    {currentUser.name}
+                  </span>
                 </Link>
-
                 <button
-                  onClick={logout}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Sign out"
+                  onClick={() => void logout()}
+                  title="Sign Out"
+                  className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
                 <Link
                   href="/login"
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 hover:text-indigo-600 transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/register"
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-100 transition-all hover:shadow"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm shadow-indigo-200 hover:shadow-indigo-300 transition-all"
                 >
-                  Get Started
+                  Register
                 </Link>
               </div>
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="flex md:hidden items-center gap-2">
+          {/* Mobile Menu Button */}
+          <div className="flex items-center gap-2 md:hidden">
             <Link
               href="/dashboard"
-              className="relative p-2 text-gray-600 hover:text-rose-600"
+              className="p-2 text-gray-600 hover:text-rose-600 relative"
             >
               <Heart className="w-5 h-5" />
               {favCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {favCount}
                 </span>
               )}
             </Link>
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
+              className="p-2 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
               aria-label="Toggle navigation menu"
             >
               {mobileMenuOpen ? (
@@ -186,61 +196,59 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu drawer */}
+      {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-gray-200 bg-white px-4 pt-2 pb-6 space-y-2 shadow-lg animate-in slide-in-from-top-2">
-          {navLinks.map((link) => {
-            const isActive =
-              pathname === link.href ||
-              (link.href !== "/" && pathname.startsWith(link.href));
-            return (
-              <Link
-                key={link.name}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-base font-medium ${
-                  isActive
-                    ? "bg-indigo-50 text-indigo-600 font-semibold"
-                    : "text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                <span>{link.name}</span>
-                {link.badge && (
-                  <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full font-semibold">
-                    {link.badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <div className="md:hidden border-b border-gray-100 bg-white/98 backdrop-blur-md px-4 pt-2 pb-6 space-y-3 animate-in slide-in-from-top-3">
+          <nav className="flex flex-col space-y-1">
+            {navLinks.map((link) => {
+              const isActive =
+                pathname === link.href ||
+                (link.href !== "/" && pathname.startsWith(link.href));
+              return (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
+                    isActive
+                      ? "text-indigo-600 bg-indigo-50 font-bold"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span>{link.name}</span>
+                  {link.badge && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full">
+                      {link.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-          <div className="pt-4 border-t border-gray-100">
+          <div className="pt-4 border-t border-gray-100 flex flex-col gap-2">
             {mounted && currentUser ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-bold">
-                      {currentUser.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {currentUser.name}
-                      </p>
-                      <p className="text-xs text-gray-500">{currentUser.email}</p>
-                    </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 px-2 py-1">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                  <span className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 bg-gray-100 rounded text-gray-600">
-                    {currentUser.role}
-                  </span>
+                  <div>
+                    <span className="text-sm font-bold text-gray-900 block">
+                      {currentUser.name}
+                    </span>
+                    <span className="text-xs text-gray-500 block">
+                      {currentUser.email}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={() => {
-                    logout();
+                    void logout();
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="w-full py-2.5 px-4 rounded-xl bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-600 text-xs font-semibold text-center transition-colors cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4" />
                   Sign Out
                 </button>
               </div>
@@ -249,14 +257,14 @@ export default function Navbar() {
                 <Link
                   href="/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full text-center px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="py-2.5 text-center text-xs font-semibold rounded-xl bg-gray-100 text-gray-800"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/register"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full text-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"
+                  className="py-2.5 text-center text-xs font-semibold rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-200"
                 >
                   Register
                 </Link>
@@ -268,4 +276,3 @@ export default function Navbar() {
     </header>
   );
 }
-

@@ -8,27 +8,24 @@ const {
   deleteProperty,
 } = require("../controller/propertyController");
 
+const { authenticate } = require("../middleware/authMiddleware");
+const { requireAdmin } = require("../middleware/adminMiddleware");
+
 const router = express.Router();
 
-// GET /api/properties
-// Public - get all properties
+// GET /api/properties (Public)
 router.get("/", getProperties);
 
-// GET /api/properties/:id
-// Public - get one property
+// GET /api/properties/:id (Public)
 router.get("/:id", getProperty);
 
-// POST /api/properties
-// Authentication/admin middleware should be added here
-router.post("/", createProperty);
+// POST /api/properties (Admin only)
+router.post("/", authenticate, requireAdmin, createProperty);
 
-// PUT /api/properties/:id
-// Authentication middleware should be added here
-router.put("/:id", updateProperty);
+// PUT /api/properties/:id (Admin only)
+router.put("/:id", authenticate, requireAdmin, updateProperty);
 
-// DELETE /api/properties/:id
-// Authentication middleware should be added here
-router.delete("/:id", deleteProperty);
+// DELETE /api/properties/:id (Admin only)
+router.delete("/:id", authenticate, requireAdmin, deleteProperty);
 
 module.exports = router;
-

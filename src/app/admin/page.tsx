@@ -17,54 +17,34 @@ import {
   ShieldCheck,
   ShieldAlert,
   LogOut,
+  Loader2,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 import {
   usePropertyStore,
-  Property,
   PropertyType,
   ListingType,
   Inquiry,
 } from "@/store/propertyStore";
-
-import { formatCurrency, formatPrice } from "@/lib/utils";
-
-/**
- * IMPORTANT:
- * The browser talks to the Node.js backend on port 4000.
- *
- * PostgreSQL is NOT accessed directly by the browser.
- * PostgreSQL normally runs on port 5432 and is accessed only
- * by the backend.
- */
-const API_URL = "http://localhost:4000";
-
-type AuthUser = {
-  id?: number;
-  email: string;
-  name: string;
-  role: "USER" | "ADMIN" | "AGENT";
-};
-
-type AuthMeResponse = {
-  user?: AuthUser;
-  error?: {
-    message?: string;
-  };
-  message?: string;
-};
+import { authApi } from "@/lib/api";
+import { formatCurrency } from "@/lib/utils";
 
 export default function AdminPage() {
   const router = useRouter();
 
   const {
     properties,
+    isLoadingProperties,
+    fetchProperties,
     addProperty,
-    updateProperty,
     deleteProperty,
     inquiries,
+    isLoadingInquiries,
+    fetchInquiries,
     updateInquiryStatus,
-    login,
+    deleteInquiry,
     logout,
   } = usePropertyStore();
 
@@ -77,352 +57,221 @@ export default function AdminPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
 
-  // =========================================
-  // NEW PROPERTY FORM STATE
-  // =========================================
-
+  // Form State
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newPrice, setNewPrice] = useState(1500000);
-
   const [newType, setNewType] = useState<ListingType>("buy");
-
-  const [newPropertyType, setNewPropertyType] =
-    useState<PropertyType>("house");
-
+  const [newPropertyType, setNewPropertyType] = useState<PropertyType>("house");
   const [newAddress, setNewAddress] = useState("");
   const [newCity, setNewCity] = useState("Beverly Hills");
-  const [newState, setNewState] = useState("CA");
-  const [newZip, setNewZip] = useState("90210");
-
   const [newBeds, setNewBeds] = useState(4);
   const [newBaths, setNewBaths] = useState(3);
   const [newSqFt, setNewSqFt] = useState(3200);
-  const [newYearBuilt, setNewYearBuilt] = useState(2023);
-
   const [newImageUrl, setNewImageUrl] = useState(
     "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"
   );
-
   const [newFeatured, setNewFeatured] = useState(true);
-
   const [newAmenities, setNewAmenities] = useState(
     "Smart Home, Swimming Pool, Wine Cellar, 2-Car Garage"
   );
 
-  // =========================================
-  // VERIFY ADMINISTRATOR
-  // =========================================
-
+  // 1. Verify Admin Status via Backend
   useEffect(() => {
     let isMounted = true;
 
-    const verifyAdministrator = async () => {
+    const verifyAdmin = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/auth/me`, {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        });
-
-        let body: AuthMeResponse = {};
-
-        try {
-          body = (await response.json()) as AuthMeResponse;
-        } catch {
-          body = {};
-        }
-
-        if (
-          response.ok &&
-          body.user &&
-          body.user.role === "ADMIN"
-        ) {
-          if (!isMounted) return;
-
-          login(
-            body.user.email,
-            "admin",
-            body.user.name
-          );
-
-          setIsAdmin(true);
-          return;
-        }
-
+        const res = await authApi.getMe();
         if (isMounted) {
-          setIsAdmin(false);
+          if (res.user && (res.user.role === "ADMIN" || res.user.role === "admin")) {
+            setIsAdmin(true);
+            void fetchProperties();
+            void fetchInquiries();
+          } else {
+            setIsAdmin(false);
+          }
         }
-      } catch (error) {
-        console.error(
-          "Administrator verification failed:",
-          error
-        );
-
-        if (isMounted) {
-          setIsAdmin(false);
-        }
+      } catch (err) {
+        console.error("Verification failed:", err);
+        if (isMounted) setIsAdmin(false);
       } finally {
-        if (isMounted) {
-          setAuthorizationChecked(true);
-        }
+        if (isMounted) setAuthorizationChecked(true);
       }
     };
 
-    void verifyAdministrator();
+    void verifyAdmin();
 
     return () => {
       isMounted = false;
     };
-  }, [login]);
-
-  // =========================================
-  // LOGOUT
-  // =========================================
+  }, [fetchProperties, fetchInquiries]);
 
   const handleLogout = async () => {
-    if (isLoggingOut) return;
-
-    setIsLoggingOut(true);
-
-    try {
-      await fetch(`${API_URL}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-    } catch (error) {
-      console.error("Logout request failed:", error);
-    } finally {
-      logout();
-      setIsAdmin(false);
-      router.replace("/admin/login");
-      setIsLoggingOut(false);
-    }
+    await logout();
+    router.replace("/admin/login");
   };
 
-  // =========================================
-  // KPI CALCULATIONS
-  // =========================================
-
+  // KPI Calculations
   const totalListings = properties.length;
+  const buyListings = properties.filter((p) => p.type === "buy");
+  const rentListings = properties.filter((p) => p.type === "rent");
+  const totalVolume = buyListings.reduce((sum, p) => sum + Number(p.price || 0), 0);
 
-  const buyListings = properties.filter(
-    (property: Property) => property.type === "buy"
-  );
+  // Search Filter
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredListings = properties.filter((p) => {
+    if (!normalizedSearch) return true;
+    return (
+      p.title.toLowerCase().includes(normalizedSearch) ||
+      p.location?.city?.toLowerCase().includes(normalizedSearch) ||
+      p.location?.address?.toLowerCase().includes(normalizedSearch)
+    );
+  });
 
-  const rentListings = properties.filter(
-    (property: Property) => property.type === "rent"
-  );
-
-  const totalVolume = buyListings.reduce(
-    (sum: number, property: Property) =>
-      sum + Number(property.price),
-    0
-  );
-
-  // =========================================
-  // SEARCH
-  // =========================================
-
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-
-  const filteredListings = properties.filter(
-    (property: Property) => {
-      if (!normalizedSearchTerm) {
-        return true;
-      }
-
-      return (
-        property.title
-          .toLowerCase()
-          .includes(normalizedSearchTerm) ||
-        property.location.city
-          .toLowerCase()
-          .includes(normalizedSearchTerm) ||
-        property.location.address
-          .toLowerCase()
-          .includes(normalizedSearchTerm) ||
-        property.location.state
-          .toLowerCase()
-          .includes(normalizedSearchTerm)
-      );
-    }
-  );
-
-  // =========================================
-  // ADD PROPERTY
-  // =========================================
-
-  const handleAddPropertySubmit = (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleAddPropertySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError("");
 
-    const title = newTitle.trim();
-    const address = newAddress.trim();
-    const city = newCity.trim();
-
-    if (!title || !address || !city) {
+    if (!newTitle.trim() || !newAddress.trim() || !newCity.trim()) {
+      setSubmitError("Please fill in title, address, and city.");
       return;
     }
 
     if (newPrice <= 0) {
+      setSubmitError("Please provide a valid property price.");
       return;
     }
 
-    if (newBeds < 0 || newBaths < 0 || newSqFt <= 0) {
-      return;
-    }
+    setIsSubmitting(true);
 
-    addProperty({
-      title,
-
-      description:
-        newDesc.trim() ||
-        "Exquisite architectural residence with premium finishes.",
-
-      price: Number(newPrice),
-
-      type: newType,
-
-      propertyType: newPropertyType,
-
-      location: {
-        address,
-        city,
-        state: newState.trim(),
-        zipCode: newZip.trim(),
-        country: "USA",
-      },
-
-      bedrooms: Number(newBeds),
-
-      bathrooms: Number(newBaths),
-
-      areaSqFt: Number(newSqFt),
-
-      images: newImageUrl.trim()
-        ? [newImageUrl.trim()]
-        : [],
-
-      featured: newFeatured,
-
-      amenities: newAmenities
+    try {
+      const amenitiesList = newAmenities
         .split(",")
-        .map((amenity) => amenity.trim())
-        .filter(Boolean),
+        .map((a) => a.trim())
+        .filter(Boolean);
 
-      yearBuilt: Number(newYearBuilt),
+      await addProperty({
+        title: newTitle.trim(),
+        description: newDesc.trim() || "Exquisite architectural residence with premium finishes.",
+        price: Number(newPrice),
+        type: newType,
+        propertyType: newPropertyType,
+        location: {
+          address: newAddress.trim(),
+          city: newCity.trim(),
+          state: "CA",
+          zipCode: "90210",
+          country: "USA",
+        },
+        bedrooms: Number(newBeds),
+        bathrooms: Number(newBaths),
+        areaSqFt: Number(newSqFt),
+        yearBuilt: new Date().getFullYear(),
+        images: [newImageUrl.trim()],
+        featured: newFeatured,
+        amenities: amenitiesList.length > 0 ? amenitiesList : ["Smart Home", "Pool"],
+        status: "available",
+      });
 
-      status: "available",
+      setActionSuccess("Property published successfully to database!");
+      setTimeout(() => setActionSuccess(""), 4000);
 
-      agent: {
-        name: "Platform Administrator",
-        email: "admin@company.invalid",
-        phone: "+1 (800) 555-0199",
-
-        avatar:
-          "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-
-        agency: "Haven Corporate Portfolio",
-      },
-    });
-
-    // Close modal
-    setIsAddModalOpen(false);
-
-    // Reset form
-    setNewTitle("");
-    setNewDesc("");
-    setNewPrice(1500000);
-    setNewType("buy");
-    setNewPropertyType("house");
-    setNewAddress("");
-    setNewCity("Beverly Hills");
-    setNewState("CA");
-    setNewZip("90210");
-    setNewBeds(4);
-    setNewBaths(3);
-    setNewSqFt(3200);
-    setNewYearBuilt(2023);
-
-    setNewImageUrl(
-      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"
-    );
-
-    setNewFeatured(true);
-
-    setNewAmenities(
-      "Smart Home, Swimming Pool, Wine Cellar, 2-Car Garage"
-    );
+      setIsAddModalOpen(false);
+      setNewTitle("");
+      setNewDesc("");
+      setNewAddress("");
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Failed to create property on server.";
+      console.error("Error creating property:", err);
+      setSubmitError(errMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // =========================================
-  // AUTHORIZATION LOADING
-  // =========================================
+  const handleDeleteProperty = async (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
+      return;
+    }
 
+    try {
+      await deleteProperty(id);
+      setActionSuccess("Property deleted successfully.");
+      setTimeout(() => setActionSuccess(""), 3000);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Failed to delete property.";
+      alert(errMsg);
+    }
+  };
+
+  const handleUpdateInquiryStatus = async (id: string, status: Inquiry["status"]) => {
+    try {
+      await updateInquiryStatus(id, status);
+      setActionSuccess("Inquiry status updated.");
+      setTimeout(() => setActionSuccess(""), 3000);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Failed to update inquiry status.";
+      alert(errMsg);
+    }
+  };
+
+  const handleDeleteInquiry = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this inquiry record?")) return;
+    try {
+      await deleteInquiry(id);
+      setActionSuccess("Inquiry deleted.");
+      setTimeout(() => setActionSuccess(""), 3000);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Failed to delete inquiry.";
+      alert(errMsg);
+    }
+  };
+
+  // 1. Loading State
   if (!authorizationChecked) {
     return (
-      <div
-        className="min-h-[75vh] flex items-center justify-center"
-        aria-busy="true"
-      >
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
-
-          <p className="text-sm text-gray-500 font-medium">
-            Verifying administrator access...
-          </p>
-        </div>
+      <div className="min-h-[80vh] flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+        <p className="text-sm font-medium text-gray-500">
+          Verifying administrator authorization...
+        </p>
       </div>
     );
   }
 
-  // =========================================
-  // ACCESS DENIED
-  // =========================================
-
+  // 2. Restricted State for Non-Admins
   if (!isAdmin) {
     return (
-      <div className="min-h-[75vh] flex items-center justify-center px-4 py-16">
-        <div className="max-w-md w-full bg-white rounded-3xl border border-gray-200 p-8 sm:p-10 text-center shadow-xl space-y-6 animate-in fade-in zoom-in-95">
-          <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-16">
+        <div className="max-w-md w-full text-center space-y-6 bg-white p-8 sm:p-10 rounded-3xl border border-red-100 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto shadow-inner">
             <ShieldAlert className="w-8 h-8" />
           </div>
-
           <div className="space-y-2">
-            <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-black tracking-tight text-gray-900">
               Access Restricted
-            </h2>
-
-            <p className="text-xs sm:text-sm text-gray-500 leading-relaxed">
-              The Property Management Portal requires verified
-              administrator credentials. Please sign in via the
-              administrator authentication portal.
+            </h1>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              This console requires verified administrator privileges. Your current session does not have access.
             </p>
           </div>
-
-          <div className="pt-2 space-y-2.5">
+          <div className="space-y-3 pt-2">
             <Link
               href="/admin/login"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-100 transition-all block text-center"
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-slate-900 hover:bg-black text-white text-sm font-semibold rounded-xl shadow-md transition-all"
             >
-              Sign In with Admin Credentials
+              <span>Authenticate as Administrator</span>
             </Link>
-
             <Link
               href="/"
-              className="w-full py-2.5 text-xs text-gray-500 hover:text-gray-900 font-medium block text-center transition-colors"
+              className="w-full inline-flex items-center justify-center text-xs text-gray-500 hover:text-gray-900 py-2 transition-colors"
             >
-              Return to Public Website
+              Return to Homepage
             </Link>
           </div>
         </div>
@@ -430,1021 +279,575 @@ export default function AdminPage() {
     );
   }
 
-  // =========================================
-  // ADMIN DASHBOARD
-  // =========================================
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-
-      {/* =====================================
-          HEADER
-      ====================================== */}
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider mb-2">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Executive Portal
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            Property Management Portal
-          </h1>
-
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Publish listings, update statuses, monitor tour requests,
-            and evaluate portfolio volume.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-100 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Property</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="p-3 text-gray-500 hover:text-rose-600 hover:bg-rose-50 border border-gray-200 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Sign out of Admin Console"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* =====================================
-          KPI CARDS
-      ====================================== */}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-
-        {/* Total Listings */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-gray-500">
-              Total Active Portfolio
-            </span>
-
-            <Building className="w-5 h-5 text-indigo-600" />
-          </div>
-
-          <div className="text-3xl font-black text-gray-900">
-            {totalListings}
-          </div>
-
-          <p className="text-xs text-gray-400">
-            {buyListings.length} For Sale •{" "}
-            {rentListings.length} Rentals
-          </p>
-        </div>
-
-        {/* Sale Volume */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-gray-500">
-              Sale Portfolio Volume
-            </span>
-
-            <DollarSign className="w-5 h-5 text-emerald-600" />
-          </div>
-
-          <div className="text-3xl font-black text-gray-900">
-            {formatCurrency(totalVolume)}
-          </div>
-
-          <p className="text-xs text-gray-400">
-            Cumulative for-sale asset value
-          </p>
-        </div>
-
-        {/* Rentals */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-gray-500">
-              Rental Inventory
-            </span>
-
-            <TrendingUp className="w-5 h-5 text-amber-600" />
-          </div>
-
-          <div className="text-3xl font-black text-gray-900">
-            {rentListings.length}
-          </div>
-
-          <p className="text-xs text-gray-400">
-            Luxury leased residences
-          </p>
-        </div>
-
-        {/* Inquiries */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase text-gray-500">
-              Inquiries & Tours
-            </span>
-
-            <Users className="w-5 h-5 text-indigo-600" />
-          </div>
-
-          <div className="text-3xl font-black text-gray-900">
-            {inquiries.length}
-          </div>
-
-          <p className="text-xs text-gray-400">
-            Scheduled client walkthroughs
-          </p>
-        </div>
-      </div>
-
-      {/* =====================================
-          TABS
-      ====================================== */}
-
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-px">
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("listings")}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 transition-all ${
-            activeTab === "listings"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-gray-500 hover:text-gray-900"
-          }`}
-        >
-          <Building className="w-4 h-4" />
-
-          <span>
-            Active Listings ({properties.length})
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("inquiries")}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-bold border-b-2 transition-all ${
-            activeTab === "inquiries"
-              ? "border-indigo-600 text-indigo-600"
-              : "border-transparent text-gray-500 hover:text-gray-900"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-
-          <span>
-            Client Inquiries ({inquiries.length})
-          </span>
-        </button>
-      </div>
-
-      {/* =====================================
-          LISTINGS TAB
-      ====================================== */}
-
-      {activeTab === "listings" && (
-        <div className="space-y-6">
-
-          {/* Search */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative w-full max-w-sm">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-
-              <input
-                type="search"
-                placeholder="Search listings by title or city..."
-                value={searchTerm}
-                onChange={(e) =>
-                  setSearchTerm(e.target.value)
-                }
-                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+    <div className="min-h-screen bg-slate-50/50 pb-20">
+      {/* Top Header */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-indigo-500/30">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                KIS-Estate Admin Console
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  LIVE API
+                </span>
+              </h1>
+              <p className="text-xs text-slate-400">
+                Connected to Firebase Firestore
+              </p>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                void fetchProperties();
+                void fetchInquiries();
+              }}
+              title="Refresh Data"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoadingProperties || isLoadingInquiries ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-red-950/50 hover:text-red-300 text-slate-300 text-xs font-semibold border border-slate-700 hover:border-red-800 transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
+        {/* Success Alert */}
+        {actionSuccess && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-800 text-sm font-medium animate-in fade-in">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{actionSuccess}</span>
+          </div>
+        )}
+
+        {/* KPI Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-2">
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Total Listings
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <Building className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900">
+              {totalListings}
+            </div>
+            <div className="text-xs text-gray-500">
+              {buyListings.length} Buy • {rentListings.length} Rent
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-2">
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Active Portfolio Value
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <DollarSign className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900">
+              {formatCurrency(totalVolume)}
+            </div>
+            <div className="text-xs text-gray-500">
+              Aggregate value for sale
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-2">
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Client Inquiries
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900">
+              {inquiries.length}
+            </div>
+            <div className="text-xs text-gray-500">
+              {inquiries.filter((i) => i.status === "pending").length} pending review
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-2">
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Featured Estates
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900">
+              {properties.filter((p) => p.featured).length}
+            </div>
+            <div className="text-xs text-gray-500">
+              Promoted on Homepage
+            </div>
+          </div>
+        </div>
+
+        {/* Main Console Section */}
+        <div className="bg-white rounded-3xl border border-gray-200/80 shadow-sm overflow-hidden">
+          {/* Tabs & Search Toolbar */}
+          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-2xl">
+              <button
+                onClick={() => setActiveTab("listings")}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "listings"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-900"
+                }`}
+              >
+                Property Listings ({properties.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("inquiries")}
+                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "inquiries"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-900"
+                }`}
+              >
+                Inquiries &amp; Tours ({inquiries.length})
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              {activeTab === "listings" && (
+                <>
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search listings..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Property</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* TAB 1: LISTINGS */}
+          {activeTab === "listings" && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-gray-600">
-                <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
-                  <tr>
-                    <th className="py-4 px-6">
-                      Property
-                    </th>
-
-                    <th className="py-4 px-6">
-                      Type
-                    </th>
-
-                    <th className="py-4 px-6">
-                      Price
-                    </th>
-
-                    <th className="py-4 px-6">
-                      City
-                    </th>
-
-                    <th className="py-4 px-6">
-                      Status
-                    </th>
-
-                    <th className="py-4 px-6 text-right">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-100">
-
-                  {filteredListings.length === 0 ? (
+              {isLoadingProperties && properties.length === 0 ? (
+                <div className="p-16 text-center space-y-3">
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                  <p className="text-xs text-gray-500">Loading listings from Firestore...</p>
+                </div>
+              ) : filteredListings.length === 0 ? (
+                <div className="p-16 text-center space-y-3">
+                  <Building className="w-10 h-10 text-gray-300 mx-auto" />
+                  <h3 className="text-sm font-bold text-gray-800">No properties found</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                    {searchTerm
+                      ? "No properties match your search term. Try a different keyword."
+                      : "Your database is empty. Click 'Add Property' to create your first listing."}
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50/80 text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-100">
                     <tr>
-                      <td
-                        colSpan={6}
-                        className="py-16 px-6 text-center"
-                      >
-                        <div className="flex flex-col items-center gap-3">
-                          <Search className="w-8 h-8 text-gray-300" />
-
-                          <p className="text-sm font-semibold text-gray-500">
-                            No properties found
-                          </p>
-
-                          <p className="text-xs text-gray-400">
-                            Try another search term or add a new property.
-                          </p>
-                        </div>
-                      </td>
+                      <th className="py-3.5 px-6">Property</th>
+                      <th className="py-3.5 px-4">Type</th>
+                      <th className="py-3.5 px-4">Price</th>
+                      <th className="py-3.5 px-4">Specs</th>
+                      <th className="py-3.5 px-4">Location</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-6 text-right">Actions</th>
                     </tr>
-                  ) : (
-                    filteredListings.map(
-                      (prop: Property) => (
-                        <tr
-                          key={prop.id}
-                          className="hover:bg-gray-50/60 transition-colors"
-                        >
-
-                          {/* Property */}
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-
-                              <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0">
-
-                                {prop.images?.[0] ? (
-                                  <Image
-                                    src={prop.images[0]}
-                                    alt={prop.title}
-                                    fill
-                                    sizes="56px"
-                                    className="object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <Building className="w-5 h-5 text-gray-400" />
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="min-w-0">
-
-                                <Link
-                                  href={`/properties/${prop.id}`}
-                                  className="font-bold text-gray-900 hover:text-indigo-600 line-clamp-1"
-                                >
-                                  {prop.title}
-                                </Link>
-
-                                <span className="text-xs text-gray-400 block truncate max-w-xs">
-                                  {prop.location.address}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Type */}
-                          <td className="py-4 px-6">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                                prop.type === "buy"
-                                  ? "bg-indigo-100 text-indigo-700"
-                                  : "bg-emerald-100 text-emerald-700"
-                              }`}
-                            >
-                              {prop.type === "buy"
-                                ? "For Sale"
-                                : "For Rent"}
-                            </span>
-                          </td>
-
-                          {/* Price */}
-                          <td className="py-4 px-6 font-bold text-gray-900">
-                            {formatPrice(
-                              prop.price,
-                              prop.type
-                            )}
-                          </td>
-
-                          {/* City */}
-                          <td className="py-4 px-6 text-gray-700">
-                            {prop.location.city},{" "}
-                            {prop.location.state}
-                          </td>
-
-                          {/* Status */}
-                          <td className="py-4 px-6">
-                            <select
-                              value={prop.status}
-                              onChange={(e) =>
-                                updateProperty(
-                                  prop.id,
-                                  {
-                                    status:
-                                      e.target
-                                        .value as Property["status"],
-                                  }
-                                )
-                              }
-                              className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            >
-                              <option value="available">
-                                Available
-                              </option>
-
-                              <option value="pending">
-                                Pending
-                              </option>
-
-                              <option value="sold">
-                                Sold
-                              </option>
-
-                              <option value="rented">
-                                Rented
-                              </option>
-                            </select>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-4 px-6 text-right">
-                            <div className="flex items-center justify-end gap-2">
-
-                              <Link
-                                href={`/properties/${prop.id}`}
-                                className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100"
-                                title="Preview Listing"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </Link>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const confirmed =
-                                    window.confirm(
-                                      "Delete this listing?"
-                                    );
-
-                                  if (confirmed) {
-                                    deleteProperty(
-                                      prop.id
-                                    );
-                                  }
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                                title="Delete Listing"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    )
-                  )}
-
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================
-          INQUIRIES TAB
-      ====================================== */}
-
-      {activeTab === "inquiries" && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
-
-              <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
-                <tr>
-                  <th className="py-4 px-6">
-                    Client
-                  </th>
-
-                  <th className="py-4 px-6">
-                    Property
-                  </th>
-
-                  <th className="py-4 px-6">
-                    Tour Date / Type
-                  </th>
-
-                  <th className="py-4 px-6">
-                    Message
-                  </th>
-
-                  <th className="py-4 px-6">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-100">
-
-                {inquiries.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="py-16 px-6 text-center"
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <Users className="w-8 h-8 text-gray-300" />
-
-                        <p className="text-sm font-semibold text-gray-500">
-                          No client inquiries
-                        </p>
-
-                        <p className="text-xs text-gray-400">
-                          New property inquiries and tour requests
-                          will appear here.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  inquiries.map(
-                    (inq: Inquiry) => (
-                      <tr
-                        key={inq.id}
-                        className="hover:bg-gray-50/60 transition-colors"
-                      >
-
-                        {/* Client */}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredListings.map((prop) => (
+                      <tr key={prop.id} className="hover:bg-gray-50/60 transition-colors">
                         <td className="py-4 px-6">
-                          <div className="font-bold text-gray-900">
-                            {inq.userName}
-                          </div>
-
-                          <div className="text-xs text-gray-500">
-                            {inq.userEmail}
-                          </div>
-
-                          {inq.userPhone && (
-                            <div className="text-xs text-gray-400">
-                              {inq.userPhone}
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl overflow-hidden relative shrink-0 bg-gray-100">
+                              <Image
+                                src={
+                                  prop.images?.[0] ||
+                                  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80"
+                                }
+                                alt={prop.title}
+                                fill
+                                className="object-cover"
+                              />
                             </div>
-                          )}
+                            <div className="space-y-0.5 max-w-[200px] sm:max-w-xs truncate">
+                              <span className="font-bold text-gray-900 block truncate">
+                                {prop.title}
+                              </span>
+                              <span className="text-[11px] text-gray-400 capitalize block">
+                                {prop.propertyType} {prop.featured && "• ⭐ Featured"}
+                              </span>
+                            </div>
+                          </div>
                         </td>
-
-                        {/* Property */}
-                        <td className="py-4 px-6 font-semibold text-gray-900">
-                          <Link
-                            href={`/properties/${inq.propertyId}`}
-                            className="hover:text-indigo-600 line-clamp-1"
+                        <td className="py-4 px-4">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              prop.type === "buy"
+                                ? "bg-indigo-50 text-indigo-700"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
                           >
-                            {inq.propertyTitle}
-                          </Link>
+                            For {prop.type}
+                          </span>
                         </td>
+                        <td className="py-4 px-4 font-bold text-gray-900">
+                          {formatCurrency(prop.price)}
+                          {prop.type === "rent" && <span className="text-gray-400 font-normal">/mo</span>}
+                        </td>
+                        <td className="py-4 px-4 text-gray-600">
+                          {prop.bedrooms} beds • {prop.bathrooms} baths • {prop.areaSqFt} sqft
+                        </td>
+                        <td className="py-4 px-4 text-gray-600">
+                          {prop.location?.city || "USA"}, {prop.location?.state || ""}
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 capitalize">
+                            {prop.status || "available"}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-right space-x-2">
+                          <Link
+                            href={`/properties/${prop.id}`}
+                            target="_blank"
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 inline-block transition-colors"
+                            title="View Public Page"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteProperty(prop.id, prop.title)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 inline-block transition-colors cursor-pointer"
+                            title="Delete Property"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
 
-                        {/* Tour */}
-                        <td className="py-4 px-6 text-xs">
-                          {inq.tourDate ? (
-                            <div>
-                              <span className="font-semibold text-gray-800">
-                                {inq.tourDate}
-                              </span>
-
-                              <span className="text-gray-500 block capitalize">
-                                {inq.tourType} Tour
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">
-                              General Inquiry
+          {/* TAB 2: INQUIRIES */}
+          {activeTab === "inquiries" && (
+            <div className="overflow-x-auto">
+              {isLoadingInquiries && inquiries.length === 0 ? (
+                <div className="p-16 text-center space-y-3">
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                  <p className="text-xs text-gray-500">Loading inquiries from database...</p>
+                </div>
+              ) : inquiries.length === 0 ? (
+                <div className="p-16 text-center space-y-3">
+                  <Users className="w-10 h-10 text-gray-300 mx-auto" />
+                  <h3 className="text-sm font-bold text-gray-800">No inquiries yet</h3>
+                  <p className="text-xs text-gray-500">
+                    Client tour bookings and property inquiries will appear here.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50/80 text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-100">
+                    <tr>
+                      <th className="py-3.5 px-6">Client</th>
+                      <th className="py-3.5 px-4">Property</th>
+                      <th className="py-3.5 px-4">Tour / Details</th>
+                      <th className="py-3.5 px-4">Message</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {inquiries.map((inq) => (
+                      <tr key={inq.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="py-4 px-6 space-y-0.5">
+                          <span className="font-bold text-gray-900 block">{inq.userName}</span>
+                          <span className="text-gray-500 block">{inq.userEmail}</span>
+                          {inq.userPhone && (
+                            <span className="text-[11px] text-gray-400 block">{inq.userPhone}</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-4 font-medium text-gray-800">
+                          {inq.propertyTitle || inq.propertyId}
+                        </td>
+                        <td className="py-4 px-4 text-gray-600 space-y-0.5">
+                          <span className="capitalize font-semibold block text-indigo-600">
+                            {inq.tourType || "inquiry"}
+                          </span>
+                          {inq.tourDate && (
+                            <span className="text-gray-500 block">
+                              📅 {inq.tourDate} {inq.tourTime && `at ${inq.tourTime}`}
                             </span>
                           )}
                         </td>
-
-                        {/* Message */}
-                        <td className="py-4 px-6 text-xs text-gray-600 max-w-xs">
-                          <div className="truncate">
-                            &quot;{inq.message}&quot;
-                          </div>
+                        <td className="py-4 px-4 text-gray-600 max-w-xs truncate">
+                          &ldquo;{inq.message}&rdquo;
                         </td>
-
-                        {/* Status */}
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-4">
                           <select
                             value={inq.status}
                             onChange={(e) =>
-                              updateInquiryStatus(
+                              handleUpdateInquiryStatus(
                                 inq.id,
-                                e.target
-                                  .value as Inquiry["status"]
+                                e.target.value as Inquiry["status"]
                               )
                             }
-                            className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 capitalize"
                           >
-                            <option value="pending">
-                              Pending
-                            </option>
-
-                            <option value="confirmed">
-                              Confirmed
-                            </option>
-
-                            <option value="completed">
-                              Completed
-                            </option>
+                            <option value="pending">Pending</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
                           </select>
                         </td>
-
+                        <td className="py-4 px-6 text-right">
+                          <button
+                            onClick={() => handleDeleteInquiry(inq.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 inline-block transition-colors cursor-pointer"
+                            title="Delete Inquiry"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
-                    )
-                  )
-                )}
-
-              </tbody>
-            </table>
-          </div>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </main>
 
-      {/* =====================================
-          ADD PROPERTY MODAL
-      ====================================== */}
-
+      {/* Add Property Modal */}
       {isAddModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="add-property-title"
-        >
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl my-8">
-
-            {/* Modal Header */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-
-              <h3
-                id="add-property-title"
-                className="text-xl font-bold text-gray-900"
-              >
-                Publish New Luxury Property
-              </h3>
-
+              <h3 className="text-lg font-bold text-gray-900">Add New Property to Database</h3>
               <button
-                type="button"
-                onClick={() =>
-                  setIsAddModalOpen(false)
-                }
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
-                aria-label="Close modal"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100"
               >
                 <X className="w-5 h-5" />
               </button>
-
             </div>
 
-            {/* Form */}
-            <form
-              onSubmit={handleAddPropertySubmit}
-              className="space-y-4"
-            >
+            {submitError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                {submitError}
+              </div>
+            )}
 
-              {/* Title */}
+            <form onSubmit={handleAddPropertySubmit} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label
-                  htmlFor="property-title"
-                  className="block text-xs font-semibold uppercase text-gray-700"
-                >
-                  Property Title
-                </label>
-
+                <label className="font-semibold text-gray-700 uppercase">Property Title</label>
                 <input
-                  id="property-title"
                   type="text"
                   required
-                  placeholder="e.g. Modernist Waterfront Haven"
                   value={newTitle}
-                  onChange={(e) =>
-                    setNewTitle(e.target.value)
-                  }
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="e.g. Modernist Waterfront Villa"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
-              {/* Listing + Property Type */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label
-                    htmlFor="listing-type"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Listing Type
-                  </label>
-
+                  <label className="font-semibold text-gray-700 uppercase">Listing Purpose</label>
                   <select
-                    id="listing-type"
                     value={newType}
-                    onChange={(e) =>
-                      setNewType(
-                        e.target.value as ListingType
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                    onChange={(e) => setNewType(e.target.value as ListingType)}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="buy">
-                      For Sale (Buy)
-                    </option>
-
-                    <option value="rent">
-                      For Rent
-                    </option>
+                    <option value="buy">For Sale (Buy)</option>
+                    <option value="rent">For Lease (Rent)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label
-                    htmlFor="property-category"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Property Category
-                  </label>
-
+                  <label className="font-semibold text-gray-700 uppercase">Property Type</label>
                   <select
-                    id="property-category"
                     value={newPropertyType}
-                    onChange={(e) =>
-                      setNewPropertyType(
-                        e.target.value as PropertyType
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm capitalize"
+                    onChange={(e) => setNewPropertyType(e.target.value as PropertyType)}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="villa">
-                      Villa
-                    </option>
-
-                    <option value="house">
-                      House
-                    </option>
-
-                    <option value="apartment">
-                      Apartment
-                    </option>
-
-                    <option value="penthouse">
-                      Penthouse
-                    </option>
-
-                    <option value="condo">
-                      Condo
-                    </option>
-
-                    <option value="townhouse">
-                      Townhouse
-                    </option>
+                    <option value="house">House</option>
+                    <option value="villa">Villa</option>
+                    <option value="apartment">Apartment</option>
+                    <option value="penthouse">Penthouse</option>
+                    <option value="condo">Condo</option>
+                    <option value="townhouse">Townhouse</option>
                   </select>
                 </div>
-
               </div>
 
-              {/* Price + City */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                  <label
-                    htmlFor="property-price"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Price ($)
-                  </label>
-
+                  <label className="font-semibold text-gray-700 uppercase">Price ($)</label>
                   <input
-                    id="property-price"
                     type="number"
                     required
-                    min={1}
                     value={newPrice}
-                    onChange={(e) =>
-                      setNewPrice(
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                    onChange={(e) => setNewPrice(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold"
                   />
                 </div>
-
                 <div className="space-y-1">
-                  <label
-                    htmlFor="property-city"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    City
-                  </label>
-
+                  <label className="font-semibold text-gray-700 uppercase">Bedrooms</label>
                   <input
-                    id="property-city"
+                    type="number"
+                    value={newBeds}
+                    onChange={(e) => setNewBeds(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-gray-700 uppercase">Bathrooms</label>
+                  <input
+                    type="number"
+                    value={newBaths}
+                    onChange={(e) => setNewBaths(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-gray-700 uppercase">Area (Sq Ft)</label>
+                  <input
+                    type="number"
+                    value={newSqFt}
+                    onChange={(e) => setNewSqFt(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <label className="font-semibold text-gray-700 uppercase">Street Address</label>
+                  <input
+                    type="text"
+                    required
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    placeholder="1420 Loma Vista Dr"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-gray-700 uppercase">City</label>
+                  <input
                     type="text"
                     required
                     value={newCity}
-                    onChange={(e) =>
-                      setNewCity(e.target.value)
-                    }
-                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                    onChange={(e) => setNewCity(e.target.value)}
+                    placeholder="Beverly Hills"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
                   />
                 </div>
-
               </div>
 
-              {/* Address */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-
-                <div className="sm:col-span-2 space-y-1">
-                  <label
-                    htmlFor="property-address"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Street Address
-                  </label>
-
-                  <input
-                    id="property-address"
-                    type="text"
-                    required
-                    placeholder="123 Ocean Drive"
-                    value={newAddress}
-                    onChange={(e) =>
-                      setNewAddress(
-                        e.target.value
-                      )
-                    }
-                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-state"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    State
-                  </label>
-
-                  <input
-                    id="property-state"
-                    type="text"
-                    value={newState}
-                    onChange={(e) =>
-                      setNewState(e.target.value)
-                    }
-                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm uppercase"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-zip"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Zip Code
-                  </label>
-
-                  <input
-                    id="property-zip"
-                    type="text"
-                    value={newZip}
-                    onChange={(e) =>
-                      setNewZip(e.target.value)
-                    }
-                    className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-              </div>
-
-              {/* Property Details */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-beds"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Beds
-                  </label>
-
-                  <input
-                    id="property-beds"
-                    type="number"
-                    min={0}
-                    value={newBeds}
-                    onChange={(e) =>
-                      setNewBeds(
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-baths"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Baths
-                  </label>
-
-                  <input
-                    id="property-baths"
-                    type="number"
-                    min={0}
-                    value={newBaths}
-                    onChange={(e) =>
-                      setNewBaths(
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-sqft"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Sq Ft
-                  </label>
-
-                  <input
-                    id="property-sqft"
-                    type="number"
-                    min={1}
-                    value={newSqFt}
-                    onChange={(e) =>
-                      setNewSqFt(
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="property-year"
-                    className="block text-xs font-semibold uppercase text-gray-700"
-                  >
-                    Year Built
-                  </label>
-
-                  <input
-                    id="property-year"
-                    type="number"
-                    min={1800}
-                    max={new Date().getFullYear()}
-                    value={newYearBuilt}
-                    onChange={(e) =>
-                      setNewYearBuilt(
-                        Number(e.target.value)
-                      )
-                    }
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
-                  />
-                </div>
-
-              </div>
-
-              {/* Image URL */}
               <div className="space-y-1">
-                <label
-                  htmlFor="property-image"
-                  className="block text-xs font-semibold uppercase text-gray-700"
-                >
-                  Image URL
-                </label>
-
+                <label className="font-semibold text-gray-700 uppercase">Image URL</label>
                 <input
-                  id="property-image"
                   type="url"
+                  required
                   value={newImageUrl}
-                  onChange={(e) =>
-                    setNewImageUrl(
-                      e.target.value
-                    )
-                  }
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                  onChange={(e) => setNewImageUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                 />
               </div>
 
-              {/* Amenities */}
               <div className="space-y-1">
-                <label
-                  htmlFor="property-amenities"
-                  className="block text-xs font-semibold uppercase text-gray-700"
-                >
-                  Amenities (comma-separated)
-                </label>
-
+                <label className="font-semibold text-gray-700 uppercase">Amenities (Comma separated)</label>
                 <input
-                  id="property-amenities"
                   type="text"
                   value={newAmenities}
-                  onChange={(e) =>
-                    setNewAmenities(
-                      e.target.value
-                    )
-                  }
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                  onChange={(e) => setNewAmenities(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                 />
               </div>
 
-              {/* Description */}
               <div className="space-y-1">
-                <label
-                  htmlFor="property-description"
-                  className="block text-xs font-semibold uppercase text-gray-700"
-                >
-                  Description
-                </label>
-
+                <label className="font-semibold text-gray-700 uppercase">Description</label>
                 <textarea
-                  id="property-description"
                   rows={3}
                   value={newDesc}
-                  onChange={(e) =>
-                    setNewDesc(e.target.value)
-                  }
-                  placeholder="Describe the architectural highlights, views, and materials..."
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none"
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Architectural features, views, finishes..."
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                 />
               </div>
 
-              {/* Featured */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
-                  id="featured-check"
+                  id="featured"
                   checked={newFeatured}
-                  onChange={(e) =>
-                    setNewFeatured(
-                      e.target.checked
-                    )
-                  }
-                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                  onChange={(e) => setNewFeatured(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded"
                 />
-
-                <label
-                  htmlFor="featured-check"
-                  className="text-xs text-gray-700 font-medium"
-                >
-                  Feature this property on the homepage
+                <label htmlFor="featured" className="font-semibold text-gray-700 cursor-pointer">
+                  Feature this property on Homepage
                 </label>
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() =>
-                    setIsAddModalOpen(false)
-                  }
-                  className="px-5 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl font-medium"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-200 font-semibold text-gray-600 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
-
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold inline-flex items-center gap-2 shadow-md shadow-indigo-200"
                 >
-                  Publish Property
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Publish Listing</span>
+                  )}
                 </button>
-
               </div>
             </form>
           </div>

@@ -10,14 +10,14 @@ import {
   KeyRound,
   Users2,
   MapPin,
-  TrendingUp,
+  Loader2,
 } from "lucide-react";
 import SearchBar from "@/components/SearchBar";
 import PropertyCard from "@/components/PropertyCard";
 import { usePropertyStore } from "@/store/propertyStore";
 
 export default function HomePage() {
-  const { properties, setFilter } = usePropertyStore();
+  const { properties, isLoadingProperties } = usePropertyStore();
   const [featuredTab, setFeaturedTab] = useState<"all" | "buy" | "rent">("all");
 
   const featuredProperties = properties
@@ -25,34 +25,40 @@ export default function HomePage() {
     .filter((p) => (featuredTab === "all" ? true : p.type === featuredTab))
     .slice(0, 6);
 
+  // If no featured exist yet, fall back to top properties
+  const displayProperties =
+    featuredProperties.length > 0
+      ? featuredProperties
+      : properties.filter((p) => (featuredTab === "all" ? true : p.type === featuredTab)).slice(0, 6);
+
   const cityHighlights = [
     {
       city: "Beverly Hills",
       state: "CA",
       image:
         "https://images.unsplash.com/photo-1580655653885-65763b2597d0?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location.city === "Beverly Hills").length,
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "beverly hills").length,
     },
     {
       city: "New York",
       state: "NY",
       image:
         "https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location.city === "New York").length,
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "new york").length,
     },
     {
       city: "Miami",
       state: "FL",
       image:
         "https://images.unsplash.com/photo-1535498730771-e735b998cd64?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location.city === "Miami").length,
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "miami").length,
     },
     {
       city: "Austin",
       state: "TX",
       image:
         "https://images.unsplash.com/photo-1531218150217-54595bc2b934?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location.city === "Austin").length,
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "austin").length,
     },
   ];
 
@@ -100,26 +106,26 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-12 mt-14 pt-10 border-t border-white/10 w-full max-w-4xl text-center">
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white">
-                1,500+
+                {properties.length > 0 ? `${properties.length}+` : "12+"}
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Curated Listings
+                Verified Residences
               </div>
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white">
-                $4.2B+
+                $120M+
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Property Volume Sold
+                Managed Portfolio
               </div>
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white">
-                99.2%
+                100%
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Client Satisfaction
+                Title Verified
               </div>
             </div>
             <div>
@@ -127,7 +133,7 @@ export default function HomePage() {
                 24/7
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Concierge Advisory
+                VIP Concierge
               </div>
             </div>
           </div>
@@ -135,12 +141,12 @@ export default function HomePage() {
       </section>
 
       {/* Featured Properties Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-wider mb-2">
               <Sparkles className="w-4 h-4" />
-              <span>Handpicked Highlights</span>
+              <span>Architectural Icons</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
               Featured Exclusive Residences
@@ -148,87 +154,113 @@ export default function HomePage() {
           </div>
 
           {/* Filter Pills */}
-          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-xl self-start md:self-auto">
-            {(
-              [
-                { id: "all", label: "All Properties" },
-                { id: "buy", label: "For Sale" },
-                { id: "rent", label: "For Rent" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setFeaturedTab(tab.id)}
-                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                  featuredTab === tab.id
-                    ? "bg-white text-indigo-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl self-start md:self-auto">
+            <button
+              onClick={() => setFeaturedTab("all")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                featuredTab === "all"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              All Types
+            </button>
+            <button
+              onClick={() => setFeaturedTab("buy")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                featuredTab === "buy"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              For Sale
+            </button>
+            <button
+              onClick={() => setFeaturedTab("rent")}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                featuredTab === "rent"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              For Lease
+            </button>
           </div>
         </div>
 
         {/* Properties Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {featuredProperties.map((property) => (
-            <PropertyCard key={property.id} property={property} />
-          ))}
-        </div>
+        {isLoadingProperties && properties.length === 0 ? (
+          <div className="py-20 text-center space-y-3">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+            <p className="text-xs text-gray-500">Loading featured residences from database...</p>
+          </div>
+        ) : displayProperties.length === 0 ? (
+          <div className="py-16 text-center bg-gray-50 rounded-3xl border border-gray-100 space-y-2">
+            <p className="text-sm font-semibold text-gray-700">No residences listed yet in this category.</p>
+            <Link href="/properties" className="text-xs text-indigo-600 font-bold underline">
+              View All Properties
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {displayProperties.map((property) => (
+              <PropertyCard key={property.id} property={property} />
+            ))}
+          </div>
+        )}
 
-        <div className="mt-12 text-center">
+        <div className="text-center pt-4">
           <Link
             href="/properties"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl shadow-md transition-all hover:gap-3"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gray-900 hover:bg-black text-white font-semibold text-sm shadow-md transition-all group"
           >
-            <span>Explore All {properties.length} Properties</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>Explore All Properties</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
       </section>
 
-      {/* Explore Top Cities */}
-      <section className="bg-gray-50 py-20 border-y border-gray-200/70">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-              Explore Premier Destinations
+      {/* Explore by City Markets */}
+      <section className="bg-gray-900 py-20 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+          <div className="text-center max-w-2xl mx-auto space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
+              Prime Destinations
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Explore Top Urban &amp; Coastal Markets
             </h2>
-            <p className="text-gray-600 text-sm mt-2">
-              Browse top luxury neighborhoods and vibrant metropolitan centers
-              where we maintain active private portfolios.
+            <p className="text-gray-400 text-sm font-light">
+              From Manhattan penthouses to Beverly Hills estates, access premier addresses across the nation.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {cityHighlights.map((dest) => (
+            {cityHighlights.map((market) => (
               <Link
-                key={dest.city}
-                href={`/properties?city=${encodeURIComponent(dest.city)}`}
-                onClick={() => setFilter("city", dest.city)}
-                className="group relative h-80 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 block"
+                key={market.city}
+                href={`/properties?city=${encodeURIComponent(market.city)}`}
+                className="group relative h-80 rounded-3xl overflow-hidden shadow-lg border border-white/10 hover:border-white/30 transition-all"
               >
                 <Image
-                  src={dest.image}
-                  alt={dest.city}
+                  src={market.image}
+                  alt={market.city}
                   fill
-                  className="object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
+                  className="object-cover group-hover:scale-105 transition-transform duration-500"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                <div className="absolute bottom-5 left-5 right-5 text-white">
-                  <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-semibold mb-1">
+                <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/30 to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-indigo-400 font-semibold">
                     <MapPin className="w-3.5 h-3.5" />
                     <span>
-                      {dest.city}, {dest.state}
+                      {market.city}, {market.state}
                     </span>
                   </div>
-                  <h3 className="text-2xl font-bold">{dest.city}</h3>
-                  <p className="text-xs text-gray-300 mt-1">
-                    {dest.count > 0
-                      ? `${dest.count} Active Properties`
-                      : "Curated Listings Available"}
+                  <h3 className="text-xl font-bold text-white tracking-tight">
+                    {market.city}
+                  </h3>
+                  <p className="text-xs text-gray-300">
+                    {market.count} Available Properties
                   </p>
                 </div>
               </Link>
@@ -237,105 +269,46 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Why Choose Us Pillars */}
+      {/* Trust Pillars */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            Why Discerning Clients Choose HavenEstate
-          </h2>
-          <p className="text-gray-600 text-base mt-3">
-            A boutique real estate service with modern technology and white-glove
-            personalized representation.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="p-8 rounded-3xl bg-white border border-gray-100 shadow-sm space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              100% Verified Listings
+            <h3 className="text-lg font-bold text-gray-900">
+              Verified Legal Titles &amp; Diligence
             </h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Every home undergoes extensive due diligence and high-resolution
-              inspection before listing.
+            <p className="text-sm text-gray-500 leading-relaxed font-light">
+              Every property undergoes meticulous title examination, architectural appraisal, and legal verification before listing.
             </p>
           </div>
 
-          <div className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5">
+          <div className="p-8 rounded-3xl bg-white border border-gray-100 shadow-sm space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <KeyRound className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Private Scheduled Tours
+            <h3 className="text-lg font-bold text-gray-900">
+              Private In-Person &amp; Video Tours
             </h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Book private in-person walkthroughs or guided 4K virtual tours on
-              your schedule.
+            <p className="text-sm text-gray-500 leading-relaxed font-light">
+              Schedule direct VIP viewings with dedicated estate advisors or experience interactive HD live video walkthroughs.
             </p>
           </div>
 
-          <div className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Transparent Pricing
-            </h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              No hidden fees or surprises. View full comps, HOA records, and
-              historical valuations.
-            </p>
-          </div>
-
-          <div className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5">
+          <div className="p-8 rounded-3xl bg-white border border-gray-100 shadow-sm space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <Users2 className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Dedicated Elite Agents
+            <h3 className="text-lg font-bold text-gray-900">
+              Discreet Client Representation
             </h3>
-            <p className="text-sm text-gray-600 leading-relaxed">
-              Work with the top 1% producing agents in each metro area with deep
-              local insight.
+            <p className="text-sm text-gray-500 leading-relaxed font-light">
+              Full concierge transaction management, confidential buyer agency, and white-glove closing assistance for high-net-worth acquisitions.
             </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Property Owner CTA Banner */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-indigo-950 text-white p-8 sm:p-14 lg:p-16 shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-8">
-          <div className="space-y-4 max-w-2xl">
-            <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">
-              For Property Owners & Investors
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Looking to Sell or Lease Your Luxury Residence?
-            </h2>
-            <p className="text-indigo-100 text-sm sm:text-base leading-relaxed">
-              Partner with HavenEstate to market your property to qualified high-net-worth
-              buyers and corporate tenants worldwide.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto shrink-0">
-            <Link
-              href="/admin"
-              className="px-6 py-3.5 bg-white text-indigo-900 font-bold rounded-xl text-center shadow-lg hover:bg-gray-100 transition-colors"
-            >
-              List a Property
-            </Link>
-            <Link
-              href="/properties"
-              className="px-6 py-3.5 bg-indigo-700/60 hover:bg-indigo-700 text-white font-bold rounded-xl text-center border border-indigo-500/50 transition-colors"
-            >
-              Browse Network
-            </Link>
           </div>
         </div>
       </section>
     </div>
   );
 }
-
