@@ -9,6 +9,8 @@ import {
   Menu,
   X,
   LogOut,
+  Briefcase,
+  Plus,
 } from "lucide-react";
 import { usePropertyStore } from "@/store/propertyStore";
 import { useIsMounted } from "@/lib/utils";
@@ -27,9 +29,9 @@ export default function Navbar() {
   const pathname = usePathname();
   const { favorites, currentUser, logout } = usePropertyStore();
 
-  const isAdmin =
-    currentUser?.role === "admin" ||
-    currentUser?.role === "ADMIN";
+  const userRole = (currentUser?.role || "").toUpperCase();
+  const isAdmin = userRole === "ADMIN";
+  const isSeller = userRole === "SELLER_PROPERTY_OWNER" || userRole === "SELLER";
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,20 +41,18 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const baseNavLinks: NavLinkItem[] = [
+  const navLinks: NavLinkItem[] = [
     { name: "Explore", href: "/properties" },
     { name: "Buy", href: "/buy" },
     { name: "Rent", href: "/rent" },
+    ...(isSeller || isAdmin
+      ? [{ name: "Seller Studio", href: "/seller", badge: "Seller" }]
+      : []),
     { name: "Dashboard", href: "/dashboard" },
+    ...(isAdmin
+      ? [{ name: "Admin Console", href: "/admin", badge: "Admin" }]
+      : []),
   ];
-
-  // Only append Admin Console if the authenticated user has ADMIN role
-  const navLinks: NavLinkItem[] = isAdmin
-    ? [
-        ...baseNavLinks,
-        { name: "Admin Console", href: "/admin", badge: "Admin" },
-      ]
-    : baseNavLinks;
 
   const favCount = mounted ? favorites.length : 0;
 
@@ -79,7 +79,7 @@ export default function Navbar() {
                 KIS<span className="text-indigo-600">Estate</span>
               </span>
               <span className="text-[10px] tracking-wider uppercase font-semibold text-gray-400 block">
-                Luxury Living
+                Nigerian Real Estate
               </span>
             </div>
           </Link>
@@ -102,7 +102,13 @@ export default function Navbar() {
                 >
                   <span>{link.name}</span>
                   {link.badge && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">
+                    <span
+                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full border ${
+                        link.badge === "Admin"
+                          ? "bg-purple-100 text-purple-700 border-purple-200"
+                          : "bg-indigo-100 text-indigo-700 border-indigo-200"
+                      }`}
+                    >
                       {link.badge}
                     </span>
                   )}
@@ -113,6 +119,17 @@ export default function Navbar() {
 
           {/* Right Action Icons & User Menu */}
           <div className="hidden md:flex items-center gap-3">
+            {/* Seller Quick Action */}
+            {mounted && isSeller && (
+              <Link
+                href="/seller"
+                className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>List Property</span>
+              </Link>
+            )}
+
             {/* Favorites Counter */}
             <Link
               href="/dashboard"
@@ -131,13 +148,13 @@ export default function Navbar() {
             {mounted && currentUser ? (
               <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
                 <Link
-                  href="/dashboard"
+                  href={isSeller ? "/seller" : "/dashboard"}
                   className="flex items-center gap-2 py-1.5 px-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">
                     {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                  <span className="text-xs font-semibold text-gray-800 max-w-[100px] truncate">
+                  <span className="text-xs font-semibold text-gray-800 max-w-[110px] truncate">
                     {currentUser.name}
                   </span>
                 </Link>
@@ -217,7 +234,13 @@ export default function Navbar() {
                 >
                   <span>{link.name}</span>
                   {link.badge && (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full">
+                    <span
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                        link.badge === "Admin"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-indigo-100 text-indigo-700"
+                      }`}
+                    >
                       {link.badge}
                     </span>
                   )}
@@ -242,6 +265,15 @@ export default function Navbar() {
                     </span>
                   </div>
                 </div>
+                {isSeller && (
+                  <Link
+                    href="/seller"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full py-2.5 px-4 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-bold text-center block"
+                  >
+                    + Manage Listings in Seller Studio
+                  </Link>
+                )}
                 <button
                   onClick={() => {
                     void logout();

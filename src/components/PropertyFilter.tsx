@@ -19,23 +19,34 @@ interface PropertyFilterProps {
 }
 
 const PROPERTY_TYPES: { id: PropertyType; label: string }[] = [
-  { id: "house", label: "House" },
-  { id: "apartment", label: "Apartment" },
-  { id: "villa", label: "Villa" },
+  { id: "duplex", label: "Duplex" },
+  { id: "terrace", label: "Terrace" },
+  { id: "flat", label: "Flat / Apartment" },
+  { id: "bungalow", label: "Bungalow" },
+  { id: "house", label: "Detached House" },
+  { id: "mansion", label: "Mansion" },
   { id: "penthouse", label: "Penthouse" },
-  { id: "condo", label: "Condo" },
-  { id: "townhouse", label: "Townhouse" },
+  { id: "land", label: "Land / Plot" },
+  { id: "commercial", label: "Commercial" },
 ];
 
 const CITIES = [
-  "New York",
-  "Beverly Hills",
-  "Miami",
-  "Austin",
-  "San Francisco",
-  "Seattle",
-  "Chicago",
-  "Los Angeles",
+  "Lekki",
+  "Ikoyi",
+  "Victoria Island",
+  "Ikeja",
+  "Ajah",
+  "Maitama",
+  "Asokoro",
+  "Guzape",
+  "Port Harcourt",
+  "Ibadan",
+  "Enugu",
+  "Benin City",
+  "Asaba",
+  "Kano",
+  "Kaduna",
+  "Owerri",
 ];
 
 export default function PropertyFilter({
@@ -74,7 +85,7 @@ export default function PropertyFilter({
         {activeFiltersCount > 0 && (
           <button
             onClick={resetFilters}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-medium transition-colors"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 font-medium transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset
@@ -85,7 +96,7 @@ export default function PropertyFilter({
       {/* Keyword Search */}
       <div className="space-y-2">
         <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider block">
-          Keyword Search
+          Search Nigerian Listings
         </label>
         <div className="relative">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -93,7 +104,7 @@ export default function PropertyFilter({
             type="text"
             value={filters.search}
             onChange={(e) => setFilter("search", e.target.value)}
-            placeholder="Search by title, street, or feature..."
+            placeholder="Search by title, area, or feature..."
             className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-gray-900 placeholder:text-gray-400"
           />
         </div>
@@ -109,15 +120,15 @@ export default function PropertyFilter({
             {(
               [
                 { id: "all", label: "All" },
-                { id: "buy", label: "Buy" },
-                { id: "rent", label: "Rent" },
+                { id: "buy", label: "For Sale" },
+                { id: "rent", label: "For Rent" },
               ] as const
             ).map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setFilter("type", item.id)}
-                className={`py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   filters.type === item.id
                     ? "bg-white text-indigo-600 shadow-sm"
                     : "text-gray-600 hover:text-gray-900"
@@ -133,7 +144,7 @@ export default function PropertyFilter({
       {/* City / Location */}
       <div className="space-y-2">
         <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider block">
-          City / Metro
+          Nigerian City / Location
         </label>
         <div className="relative">
           <select
@@ -141,7 +152,7 @@ export default function PropertyFilter({
             onChange={(e) => setFilter("city", e.target.value)}
             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all appearance-none cursor-pointer"
           >
-            <option value="all">All Available Cities</option>
+            <option value="all">All Locations</option>
             {CITIES.map((cityName) => (
               <option key={cityName} value={cityName}>
                 {cityName}
@@ -161,7 +172,7 @@ export default function PropertyFilter({
           <button
             type="button"
             onClick={() => setFilter("propertyType", "all")}
-            className={`px-3 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition-all ${
+            className={`px-3 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition-all cursor-pointer ${
               filters.propertyType === "all"
                 ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold"
                 : "border-gray-200 text-gray-700 hover:bg-gray-50"
@@ -175,7 +186,7 @@ export default function PropertyFilter({
               key={pt.id}
               type="button"
               onClick={() => setFilter("propertyType", pt.id)}
-              className={`px-3 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition-all ${
+              className={`px-3 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition-all cursor-pointer ${
                 filters.propertyType === pt.id
                   ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold"
                   : "border-gray-200 text-gray-700 hover:bg-gray-50"
@@ -191,13 +202,13 @@ export default function PropertyFilter({
       {/* Price Range */}
       <div className="space-y-2">
         <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider block">
-          Price Range ($)
+          Price Range (₦)
         </label>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <input
               type="number"
-              placeholder="Min Price"
+              placeholder="Min Price (₦)"
               value={filters.minPrice ?? ""}
               onChange={(e) =>
                 setFilter(
@@ -211,7 +222,7 @@ export default function PropertyFilter({
           <div>
             <input
               type="number"
-              placeholder="Max Price"
+              placeholder="Max Price (₦)"
               value={filters.maxPrice ?? ""}
               onChange={(e) =>
                 setFilter(
@@ -231,12 +242,12 @@ export default function PropertyFilter({
           Bedrooms
         </label>
         <div className="flex rounded-xl bg-gray-100 p-1">
-          {["any", "1", "2", "3", "4+"].map((bed) => (
+          {["any", "1", "2", "3", "4", "5+"].map((bed) => (
             <button
               key={bed}
               type="button"
               onClick={() => setFilter("bedrooms", bed)}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all cursor-pointer ${
                 filters.bedrooms === bed
                   ? "bg-white text-indigo-600 shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
@@ -254,12 +265,12 @@ export default function PropertyFilter({
           Bathrooms
         </label>
         <div className="flex rounded-xl bg-gray-100 p-1">
-          {["any", "1", "2", "3", "4+"].map((bath) => (
+          {["any", "1", "2", "3", "4", "5+"].map((bath) => (
             <button
               key={bath}
               type="button"
               onClick={() => setFilter("bathrooms", bath)}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all cursor-pointer ${
                 filters.bathrooms === bath
                   ? "bg-white text-indigo-600 shadow-sm"
                   : "text-gray-600 hover:text-gray-900"
@@ -285,8 +296,8 @@ export default function PropertyFilter({
             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer"
           >
             <option value="featured">Featured First</option>
-            <option value="price-asc">Price: Low to High</option>
-            <option value="price-desc">Price: High to Low</option>
+            <option value="price-asc">Price: Low to High (₦)</option>
+            <option value="price-desc">Price: High to Low (₦)</option>
             <option value="newest">Newest Listed</option>
           </select>
           <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />

@@ -15,25 +15,27 @@ export function cn(...inputs: (string | boolean | undefined | null)[]): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+  if (isNaN(amount) || amount === null || amount === undefined) return "₦0";
+  return new Intl.NumberFormat("en-NG", {
     style: "currency",
-    currency: "USD",
+    currency: "NGN",
     maximumFractionDigits: 0,
   }).format(amount);
 }
 
 export function formatPrice(price: number, type: "buy" | "rent"): string {
   const formatted = formatCurrency(price);
-  return type === "rent" ? `${formatted}/mo` : formatted;
+  return type === "rent" ? `${formatted}/yr` : formatted;
 }
 
 export function formatNumber(num: number): string {
-  return new Intl.NumberFormat("en-US").format(num);
+  if (isNaN(num) || num === null || num === undefined) return "0";
+  return new Intl.NumberFormat("en-NG").format(num);
 }
 
 export function formatDate(dateString: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("en-NG", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -55,8 +57,8 @@ export interface MortgageCalculation {
 export function calculateMortgage(
   homePrice: number,
   downPaymentPct: number = 20,
-  interestRatePct: number = 6.5,
-  loanTermYears: number = 30
+  interestRatePct: number = 18.5,
+  loanTermYears: number = 20
 ): MortgageCalculation {
   const downPayment = (homePrice * downPaymentPct) / 100;
   const loanAmount = homePrice - downPayment;
@@ -72,9 +74,9 @@ export function calculateMortgage(
       (Math.pow(1 + monthlyRate, totalMonths) - 1);
   }
 
-  // Estimated annual property tax ~ 1.1%, home insurance ~ 0.4%
-  const propertyTax = (homePrice * 0.011) / 12;
-  const homeInsurance = (homePrice * 0.004) / 12;
+  // Estimated statutory & insurance allocation
+  const propertyTax = (homePrice * 0.005) / 12;
+  const homeInsurance = (homePrice * 0.003) / 12;
   const monthlyPayment = Math.round(principalAndInterest + propertyTax + homeInsurance);
 
   return {

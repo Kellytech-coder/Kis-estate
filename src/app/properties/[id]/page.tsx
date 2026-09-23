@@ -257,8 +257,9 @@ export default function PropertyDetailPage({
           <p className="flex items-center gap-1.5 text-sm text-gray-500">
             <MapPin className="w-4 h-4 text-indigo-600 shrink-0" />
             <span>
-              {property.location?.address}, {property.location?.city},{" "}
-              {property.location?.state} {property.location?.zipCode}
+              {property.location?.address ? `${property.location.address}, ` : ""}
+              {property.location?.city}, {property.location?.state}
+              {property.location?.lga ? ` (${property.location.lga} LGA)` : ""}, {property.location?.country || "Nigeria"}
             </span>
           </p>
         </div>
@@ -267,13 +268,13 @@ export default function PropertyDetailPage({
           <div className="text-3xl sm:text-4xl font-black text-gray-900">
             {formatCurrency(property.price)}
             {property.type === "rent" && (
-              <span className="text-base text-gray-500 font-normal">/mo</span>
+              <span className="text-base text-gray-500 font-normal">/yr</span>
             )}
           </div>
           <p className="text-xs text-gray-400">
             {property.type === "buy"
-              ? `Est. ${formatCurrency(Math.round(property.price / 360))}/mo mortgage`
-              : "Security deposit required upon lease"}
+              ? "Title verified & Governor's Consent / C of O ready"
+              : "Serviced tenancy with 24/7 power & security"}
           </p>
         </div>
       </div>
@@ -409,7 +410,7 @@ export default function PropertyDetailPage({
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl overflow-hidden relative bg-gray-100 shrink-0">
                     <Image
-                      src={property.agent.avatar}
+                      src={property.agent.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"}
                       alt={property.agent.name}
                       fill
                       className="object-cover"

@@ -33,32 +33,32 @@ export default function HomePage() {
 
   const cityHighlights = [
     {
-      city: "Beverly Hills",
-      state: "CA",
+      city: "Ikoyi",
+      state: "Lagos",
       image:
-        "https://images.unsplash.com/photo-1580655653885-65763b2597d0?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location?.city?.toLowerCase() === "beverly hills").length,
+        "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "ikoyi").length,
     },
     {
-      city: "New York",
-      state: "NY",
+      city: "Lekki",
+      state: "Lagos",
       image:
-        "https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location?.city?.toLowerCase() === "new york").length,
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "lekki").length,
     },
     {
-      city: "Miami",
-      state: "FL",
+      city: "Maitama",
+      state: "Abuja",
       image:
-        "https://images.unsplash.com/photo-1535498730771-e735b998cd64?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location?.city?.toLowerCase() === "miami").length,
+        "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "maitama").length,
     },
     {
-      city: "Austin",
-      state: "TX",
+      city: "Port Harcourt",
+      state: "Rivers",
       image:
-        "https://images.unsplash.com/photo-1531218150217-54595bc2b934?auto=format&fit=crop&w=800&q=80",
-      count: properties.filter((p) => p.location?.city?.toLowerCase() === "austin").length,
+        "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+      count: properties.filter((p) => p.location?.city?.toLowerCase() === "port harcourt").length,
     },
   ];
 
@@ -70,7 +70,7 @@ export default function HomePage() {
         <div className="absolute inset-0 z-0">
           <Image
             src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2000&q=85"
-            alt="Luxury Architecture"
+            alt="Nigerian Luxury Real Estate"
             fill
             priority
             className="object-cover object-center brightness-[0.38]"
@@ -83,18 +83,16 @@ export default function HomePage() {
           {/* Top Pill Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-semibold text-indigo-200 mb-6 animate-in fade-in slide-in-from-bottom-3 duration-500">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Curated Collection of Premier Real Estate</span>
+            <span>Curated Collection of Premier Nigerian Real Estate</span>
           </div>
 
           {/* Heading */}
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl leading-[1.1] mb-6">
-            Find Your Next <span className="text-indigo-400">Sanctuary</span> in
-            the City or Coast
+            Find Your Dream <span className="text-indigo-400">Home &amp; Sanctuary</span> in Nigeria
           </h1>
 
           <p className="text-base sm:text-xl text-gray-300 max-w-2xl font-light mb-10 leading-relaxed">
-            Unrivaled luxury homes, modern high-rise penthouses, and tranquil
-            estates. Verified properties with seamless tour scheduling.
+            Contemporary duplexes, serviced luxury apartments, and tranquil estates in Lagos, Abuja, Port Harcourt, and beyond. Verified titles with seamless tour scheduling.
           </p>
 
           {/* Floating Search Bar */}
@@ -109,15 +107,15 @@ export default function HomePage() {
                 {properties.length > 0 ? `${properties.length}+` : "12+"}
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Verified Residences
+                Verified Nigerian Listings
               </div>
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-extrabold text-white">
-                $120M+
+                ₦50B+
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Managed Portfolio
+                Portfolio Value
               </div>
             </div>
             <div>
@@ -125,7 +123,7 @@ export default function HomePage() {
                 100%
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                Title Verified
+                Title &amp; C of O Verified
               </div>
             </div>
             <div>
@@ -133,7 +131,7 @@ export default function HomePage() {
                 24/7
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">
-                VIP Concierge
+                Real Estate Advisory
               </div>
             </div>
           </div>
@@ -192,7 +190,7 @@ export default function HomePage() {
         {isLoadingProperties && properties.length === 0 ? (
           <div className="py-20 text-center space-y-3">
             <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-            <p className="text-xs text-gray-500">Loading featured residences from database...</p>
+            <p className="text-xs text-gray-500">Loading verified Nigerian residences from Firestore...</p>
           </div>
         ) : displayProperties.length === 0 ? (
           <div className="py-16 text-center bg-gray-50 rounded-3xl border border-gray-100 space-y-2">
@@ -212,9 +210,9 @@ export default function HomePage() {
         <div className="text-center pt-4">
           <Link
             href="/properties"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gray-900 hover:bg-black text-white font-semibold text-sm shadow-md transition-all group"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gray-900 hover:bg-black text-white font-semibold text-sm shadow-md transition-all group cursor-pointer"
           >
-            <span>Explore All Properties</span>
+            <span>Explore All Nigerian Properties</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
@@ -225,13 +223,13 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-3">
             <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-              Prime Destinations
+              Prime Nigerian Locations
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-              Explore Top Urban &amp; Coastal Markets
+              Explore Top Urban &amp; Waterfront Markets
             </h2>
             <p className="text-gray-400 text-sm font-light">
-              From Manhattan penthouses to Beverly Hills estates, access premier addresses across the nation.
+              From waterfront Banana Island &amp; Lekki duplexes to prestigious Maitama hills mansions in Abuja.
             </p>
           </div>
 
@@ -240,7 +238,7 @@ export default function HomePage() {
               <Link
                 key={market.city}
                 href={`/properties?city=${encodeURIComponent(market.city)}`}
-                className="group relative h-80 rounded-3xl overflow-hidden shadow-lg border border-white/10 hover:border-white/30 transition-all"
+                className="group relative h-80 rounded-3xl overflow-hidden shadow-lg border border-white/10 hover:border-white/30 transition-all cursor-pointer"
               >
                 <Image
                   src={market.image}
@@ -277,10 +275,10 @@ export default function HomePage() {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-gray-900">
-              Verified Legal Titles &amp; Diligence
+              Verified Title Documents &amp; Due Diligence
             </h3>
             <p className="text-sm text-gray-500 leading-relaxed font-light">
-              Every property undergoes meticulous title examination, architectural appraisal, and legal verification before listing.
+              Every property undergoes title search at the State Lands Registry (Governor&apos;s Consent, C of O, Gazette) before approval.
             </p>
           </div>
 
@@ -289,10 +287,10 @@ export default function HomePage() {
               <KeyRound className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-gray-900">
-              Private In-Person &amp; Video Tours
+              Private Scheduled Physical &amp; Video Tours
             </h3>
             <p className="text-sm text-gray-500 leading-relaxed font-light">
-              Schedule direct VIP viewings with dedicated estate advisors or experience interactive HD live video walkthroughs.
+              Schedule direct physical inspections with verified property owners or experience interactive 4K video walkthroughs.
             </p>
           </div>
 
@@ -301,10 +299,10 @@ export default function HomePage() {
               <Users2 className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-gray-900">
-              Discreet Client Representation
+              Trusted Buyer &amp; Seller Advisory
             </h3>
             <p className="text-sm text-gray-500 leading-relaxed font-light">
-              Full concierge transaction management, confidential buyer agency, and white-glove closing assistance for high-net-worth acquisitions.
+              Full legal documentation assistance, deed of assignment processing, and secure escrow management.
             </p>
           </div>
         </div>

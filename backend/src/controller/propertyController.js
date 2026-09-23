@@ -23,16 +23,18 @@ const formatPropertyDoc = (doc) => {
     description: data.description || "",
     price: Number(data.price) || 0,
     type: data.type || data.listingType || "buy",
-    propertyType: data.propertyType || "house",
+    propertyType: data.propertyType || "duplex",
     location: data.location || {
       address: data.address || "",
-      city: data.city || "",
-      state: data.state || "",
+      city: data.city || "Lagos",
+      state: data.state || "Lagos",
+      lga: data.lga || "",
       zipCode: data.zipCode || data.postalCode || "",
-      country: data.country || "USA",
+      country: data.country || "Nigeria",
     },
     bedrooms: Number(data.bedrooms) || 0,
     bathrooms: Number(data.bathrooms) || 0,
+    parking: Number(data.parking) || 0,
     areaSqFt: Number(data.areaSqFt) || 0,
     yearBuilt: Number(data.yearBuilt) || new Date().getFullYear(),
     images: Array.isArray(data.images) && data.images.length > 0 ? data.images : [],
@@ -40,20 +42,21 @@ const formatPropertyDoc = (doc) => {
     amenities: Array.isArray(data.amenities) ? data.amenities : [],
     status: (data.status || "available").toLowerCase(),
     agent: data.agent || {
-      name: "Marcus Vance",
-      email: "marcus.vance@havenestate.com",
-      phone: "+1 (310) 555-0192",
+      name: data.sellerName || "KIS-Estate Advisor",
+      email: data.sellerEmail || "kelechiawa11@gmail.com",
+      phone: data.sellerPhone || "+234 800 000 0000",
       avatar:
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-      agency: "Haven Luxury Real Estate",
+      agency: data.agencyName || "KIS-Estate Properties Nigeria",
     },
+    createdById: data.createdById || null,
     createdAt,
     updatedAt,
   };
 };
 
 // ========================================
-// GET ALL PROPERTIES
+// GET ALL PROPERTIES (Public)
 // ========================================
 const getProperties = async (req, res, next) => {
   try {
@@ -63,6 +66,7 @@ const getProperties = async (req, res, next) => {
       propertyType,
       featured,
       city,
+      state,
       minPrice,
       maxPrice,
       search,
@@ -93,7 +97,17 @@ const getProperties = async (req, res, next) => {
     if (city && city !== "all") {
       const normalizedCity = city.toLowerCase().trim();
       properties = properties.filter(
-        (p) => p.location?.city?.toLowerCase()?.trim() === normalizedCity
+        (p) =>
+          p.location?.city?.toLowerCase()?.trim() === normalizedCity ||
+          p.location?.state?.toLowerCase()?.trim() === normalizedCity ||
+          p.location?.address?.toLowerCase()?.includes(normalizedCity)
+      );
+    }
+
+    if (state && state !== "all") {
+      const normalizedState = state.toLowerCase().trim();
+      properties = properties.filter(
+        (p) => p.location?.state?.toLowerCase()?.trim() === normalizedState
       );
     }
 
@@ -117,9 +131,10 @@ const getProperties = async (req, res, next) => {
         const titleMatch = p.title.toLowerCase().includes(q);
         const descMatch = p.description.toLowerCase().includes(q);
         const cityMatch = p.location?.city?.toLowerCase().includes(q);
+        const stateMatch = p.location?.state?.toLowerCase().includes(q);
         const addrMatch = p.location?.address?.toLowerCase().includes(q);
         const amenityMatch = p.amenities.some((a) => a.toLowerCase().includes(q));
-        return titleMatch || descMatch || cityMatch || addrMatch || amenityMatch;
+        return titleMatch || descMatch || cityMatch || stateMatch || addrMatch || amenityMatch;
       });
     }
 
@@ -141,7 +156,7 @@ const getProperties = async (req, res, next) => {
 };
 
 // ========================================
-// GET ONE PROPERTY
+// GET ONE PROPERTY (Public)
 // ========================================
 const getProperty = async (req, res, next) => {
   try {
@@ -164,7 +179,28 @@ const getProperty = async (req, res, next) => {
 };
 
 // ========================================
-// CREATE PROPERTY
+// GET SELLER'S OWN PROPERTIES
+// ========================================
+const getMyProperties = async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const snapshot = await propertiesCollection.where("createdById", "==", userId).get();
+
+    const properties = snapshot.docs.map(formatPropertyDoc);
+    properties.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({
+      success: true,
+      count: properties.length,
+      data: properties,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ========================================
+// CREATE PROPERTY (Seller or Admin)
 // ========================================
 const createProperty = async (req, res, next) => {
   try {
@@ -179,10 +215,12 @@ const createProperty = async (req, res, next) => {
       address,
       city,
       state,
+      lga,
       zipCode,
       country,
       bedrooms = 0,
       bathrooms = 0,
+      parking = 0,
       areaSqFt = 0,
       yearBuilt = new Date().getFullYear(),
       featured = false,
@@ -200,24 +238,27 @@ const createProperty = async (req, res, next) => {
     }
 
     const resolvedType = type || listingType || "buy";
-    const resolvedPropertyType = propertyType || "house";
+    const resolvedPropertyType = propertyType || "duplex";
 
     const resolvedLocation = location || {
       address: address || "",
-      city: city || "",
-      state: state || "",
+      city: city || "Lagos",
+      state: state || "Lagos",
+      lga: lga || "",
       zipCode: zipCode || "",
-      country: country || "USA",
+      country: country || "Nigeria",
     };
 
+    const userProfile = req.userProfile || {};
+
     const resolvedAgent = agent || {
-      name: req.userProfile?.name || "Marcus Vance",
-      email: req.userProfile?.email || "marcus.vance@havenestate.com",
-      phone: "+1 (310) 555-0192",
+      name: userProfile.name || req.user.name || "Property Owner",
+      email: userProfile.email || req.user.email || "kelechiawa11@gmail.com",
+      phone: userProfile.phone || "+234 800 000 0000",
       avatar:
-        req.userProfile?.photoURL ||
+        userProfile.photoURL ||
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
-      agency: "Haven Luxury Real Estate",
+      agency: userProfile.agencyName || "KIS-Estate Nigeria",
     };
 
     const propertyRef = propertiesCollection.doc();
@@ -232,6 +273,7 @@ const createProperty = async (req, res, next) => {
       location: resolvedLocation,
       bedrooms: Number(bedrooms) || 0,
       bathrooms: Number(bathrooms) || 0,
+      parking: Number(parking) || 0,
       areaSqFt: Number(areaSqFt) || 0,
       yearBuilt: Number(yearBuilt) || new Date().getFullYear(),
       featured: Boolean(featured),
@@ -242,6 +284,7 @@ const createProperty = async (req, res, next) => {
       amenities: Array.isArray(amenities) ? amenities : [],
       agent: resolvedAgent,
       createdById: req.user.uid,
+      sellerEmail: userProfile.email || req.user.email || null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -261,7 +304,7 @@ const createProperty = async (req, res, next) => {
 };
 
 // ========================================
-// UPDATE PROPERTY
+// UPDATE PROPERTY (Owner or Admin)
 // ========================================
 const updateProperty = async (req, res, next) => {
   try {
@@ -275,12 +318,25 @@ const updateProperty = async (req, res, next) => {
       });
     }
 
+    const currentData = snapshot.data();
+    const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
+    const isOwner = currentData.createdById === req.user.uid;
+
+    // Strict Ownership Enforcement: Non-admins can only modify their own listings
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You are not authorized to modify this property listing.",
+      });
+    }
+
     const updates = { ...req.body };
 
     // Format numbers if provided
     if (updates.price !== undefined) updates.price = Number(updates.price);
     if (updates.bedrooms !== undefined) updates.bedrooms = Number(updates.bedrooms);
     if (updates.bathrooms !== undefined) updates.bathrooms = Number(updates.bathrooms);
+    if (updates.parking !== undefined) updates.parking = Number(updates.parking);
     if (updates.areaSqFt !== undefined) updates.areaSqFt = Number(updates.areaSqFt);
     if (updates.yearBuilt !== undefined) updates.yearBuilt = Number(updates.yearBuilt);
     if (updates.featured !== undefined) updates.featured = Boolean(updates.featured);
@@ -302,7 +358,7 @@ const updateProperty = async (req, res, next) => {
 };
 
 // ========================================
-// DELETE PROPERTY
+// DELETE PROPERTY (Owner or Admin)
 // ========================================
 const deleteProperty = async (req, res, next) => {
   try {
@@ -313,6 +369,18 @@ const deleteProperty = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Property not found",
+      });
+    }
+
+    const currentData = snapshot.data();
+    const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
+    const isOwner = currentData.createdById === req.user.uid;
+
+    // Strict Ownership Enforcement: Non-admins can only delete their own listings
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You are not authorized to delete this property listing.",
       });
     }
 
@@ -330,6 +398,7 @@ const deleteProperty = async (req, res, next) => {
 module.exports = {
   getProperties,
   getProperty,
+  getMyProperties,
   createProperty,
   updateProperty,
   deleteProperty,

@@ -6,6 +6,8 @@ const propertyRoutes = require("./routes/propertyRoute");
 const locationRoutes = require("./routes/locationRoute");
 const amenityRoutes = require("./routes/amenityRoute");
 const inquiryRoutes = require("./routes/inquiryRoute");
+const contactRoutes = require("./routes/contactRoute");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -68,6 +70,8 @@ app.use("/api/properties", propertyRoutes);
 app.use("/api/locations", locationRoutes);
 app.use("/api/amenities", amenityRoutes);
 app.use("/api/inquiries", inquiryRoutes);
+app.use("/api/contact", contactRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

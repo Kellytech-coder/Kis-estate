@@ -31,22 +31,22 @@ export default function SearchBar({
     let maxPrice: number | null = null;
 
     if (activeType === "rent") {
-      if (priceTier === "under-3k") {
-        maxPrice = 3000;
-      } else if (priceTier === "3k-6k") {
-        minPrice = 3000;
-        maxPrice = 6000;
-      } else if (priceTier === "6k-plus") {
-        minPrice = 6000;
+      if (priceTier === "under-5m") {
+        maxPrice = 5000000;
+      } else if (priceTier === "5m-15m") {
+        minPrice = 5000000;
+        maxPrice = 15000000;
+      } else if (priceTier === "15m-plus") {
+        minPrice = 15000000;
       }
     } else {
-      if (priceTier === "under-1m") {
-        maxPrice = 1000000;
-      } else if (priceTier === "1m-3m") {
-        minPrice = 1000000;
-        maxPrice = 3000000;
-      } else if (priceTier === "3m-plus") {
-        minPrice = 3000000;
+      if (priceTier === "under-100m") {
+        maxPrice = 100000000;
+      } else if (priceTier === "100m-300m") {
+        minPrice = 100000000;
+        maxPrice = 300000000;
+      } else if (priceTier === "300m-plus") {
+        minPrice = 300000000;
       }
     }
 
@@ -78,9 +78,9 @@ export default function SearchBar({
       <div className="flex items-center gap-2 mb-4">
         {(
           [
-            { id: "all", label: "All Properties" },
-            { id: "buy", label: "Buy" },
-            { id: "rent", label: "Rent" },
+            { id: "all", label: "All Nigerian Properties" },
+            { id: "buy", label: "For Sale" },
+            { id: "rent", label: "For Rent" },
           ] as const
         ).map((tab) => (
           <button
@@ -90,7 +90,7 @@ export default function SearchBar({
               setActiveType(tab.id);
               setPriceTier("all");
             }}
-            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all ${
+            className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all cursor-pointer ${
               activeType === tab.id
                 ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
                 : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
@@ -106,7 +106,7 @@ export default function SearchBar({
         onSubmit={handleSearch}
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-2 items-center"
       >
-        {/* City / Location Input */}
+        {/* Nigerian City / Location Input */}
         <div className="flex items-center gap-3 px-3.5 py-2.5 bg-gray-50/80 hover:bg-gray-50 border border-gray-200/80 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
           <MapPin className="w-5 h-5 text-indigo-500 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -114,7 +114,7 @@ export default function SearchBar({
               htmlFor="city-select"
               className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500"
             >
-              Location
+              Location / City
             </label>
             <select
               id="city-select"
@@ -122,20 +122,28 @@ export default function SearchBar({
               onChange={(e) => setCity(e.target.value)}
               className="w-full bg-transparent text-sm font-medium text-gray-900 focus:outline-none cursor-pointer truncate"
             >
-              <option value="all">All Cities</option>
-              <option value="New York">New York, NY</option>
-              <option value="Beverly Hills">Beverly Hills, CA</option>
-              <option value="Miami">Miami, FL</option>
-              <option value="Austin">Austin, TX</option>
-              <option value="San Francisco">San Francisco, CA</option>
-              <option value="Seattle">Seattle, WA</option>
-              <option value="Chicago">Chicago, IL</option>
-              <option value="Los Angeles">Los Angeles, CA</option>
+              <option value="all">All Nigerian Locations</option>
+              <option value="Lekki">Lekki, Lagos</option>
+              <option value="Ikoyi">Ikoyi, Lagos</option>
+              <option value="Victoria Island">Victoria Island, Lagos</option>
+              <option value="Ikeja">Ikeja, Lagos</option>
+              <option value="Ajah">Ajah &amp; Sangotedo, Lagos</option>
+              <option value="Maitama">Maitama, Abuja</option>
+              <option value="Asokoro">Asokoro, Abuja</option>
+              <option value="Guzape">Guzape, Abuja</option>
+              <option value="Port Harcourt">Port Harcourt, Rivers</option>
+              <option value="Ibadan">Ibadan, Oyo</option>
+              <option value="Enugu">Enugu, Enugu</option>
+              <option value="Benin City">Benin City, Edo</option>
+              <option value="Asaba">Asaba, Delta</option>
+              <option value="Kano">Kano, Kano</option>
+              <option value="Kaduna">Kaduna, Kaduna</option>
+              <option value="Owerri">Owerri, Imo</option>
             </select>
           </div>
         </div>
 
-        {/* Property Type Dropdown */}
+        {/* Nigerian Property Type Dropdown */}
         <div className="flex items-center gap-3 px-3.5 py-2.5 bg-gray-50/80 hover:bg-gray-50 border border-gray-200/80 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
           <Home className="w-5 h-5 text-indigo-500 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -152,17 +160,21 @@ export default function SearchBar({
               className="w-full bg-transparent text-sm font-medium text-gray-900 focus:outline-none cursor-pointer capitalize truncate"
             >
               <option value="all">All Property Types</option>
-              <option value="villa">Luxury Villa</option>
-              <option value="house">Single Family House</option>
-              <option value="apartment">Modern Apartment</option>
-              <option value="penthouse">Sky Penthouse</option>
-              <option value="condo">Luxury Condo</option>
-              <option value="townhouse">Historic Townhouse</option>
+              <option value="duplex">Duplex</option>
+              <option value="terrace">Terrace Duplex</option>
+              <option value="flat">Flat / Apartment</option>
+              <option value="mansion">Luxury Mansion</option>
+              <option value="penthouse">Penthouse</option>
+              <option value="bungalow">Bungalow</option>
+              <option value="house">Detached House</option>
+              <option value="land">Land / Plot</option>
+              <option value="commercial">Commercial Property</option>
+              <option value="office">Office Space</option>
             </select>
           </div>
         </div>
 
-        {/* Price Range Dropdown */}
+        {/* Naira Price Range Dropdown */}
         <div className="flex items-center gap-3 px-3.5 py-2.5 bg-gray-50/80 hover:bg-gray-50 border border-gray-200/80 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
           <DollarSign className="w-5 h-5 text-indigo-500 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -170,7 +182,7 @@ export default function SearchBar({
               htmlFor="price-tier-select"
               className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500"
             >
-              Price Range
+              Price Range (₦)
             </label>
             <select
               id="price-tier-select"
@@ -181,15 +193,15 @@ export default function SearchBar({
               <option value="all">Any Price</option>
               {activeType === "rent" ? (
                 <>
-                  <option value="under-3k">Under $3,000 / mo</option>
-                  <option value="3k-6k">$3,000 - $6,000 / mo</option>
-                  <option value="6k-plus">$6,000+ / mo</option>
+                  <option value="under-5m">Under ₦5,000,000 / yr</option>
+                  <option value="5m-15m">₦5M - ₦15,000,000 / yr</option>
+                  <option value="15m-plus">₦15,000,000+ / yr</option>
                 </>
               ) : (
                 <>
-                  <option value="under-1m">Under $1,000,000</option>
-                  <option value="1m-3m">$1,000,000 - $3,000,000</option>
-                  <option value="3m-plus">$3,000,000+</option>
+                  <option value="under-100m">Under ₦100,000,000</option>
+                  <option value="100m-300m">₦100M - ₦300,000,000</option>
+                  <option value="300m-plus">₦300,000,000+</option>
                 </>
               )}
             </select>
@@ -200,14 +212,13 @@ export default function SearchBar({
         <div className="w-full">
           <button
             type="submit"
-            className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all hover:-translate-y-0.5"
+            className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all hover:-translate-y-0.5 cursor-pointer"
           >
             <Search className="w-5 h-5" />
-            <span>Search Properties</span>
+            <span>Search Listings</span>
           </button>
         </div>
       </form>
     </div>
   );
 }
-

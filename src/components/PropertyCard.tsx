@@ -146,7 +146,7 @@ export default function PropertyCard({ property, className = "" }: PropertyCardP
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full overflow-hidden relative bg-gray-200 shrink-0">
               <Image
-                src={property.agent.avatar}
+                src={property.agent.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"}
                 alt={property.agent.name}
                 fill
                 className="object-cover"

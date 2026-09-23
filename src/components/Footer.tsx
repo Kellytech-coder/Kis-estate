@@ -9,17 +9,58 @@ import {
   ShieldCheck,
   Award,
   Lock,
+  Mail,
+  Send,
+  Loader2,
+  AlertCircle,
+  Briefcase,
 } from "lucide-react";
+import { contactApi } from "@/lib/api";
 
 export default function Footer() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
-      setSubscribed(true);
+    if (!name.trim() || !email.trim() || !message.trim()) {
+      setFeedback({
+        type: "error",
+        text: "Please enter your name, email, and message.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedback(null);
+
+    try {
+      await contactApi.sendMessage({
+        name: name.trim(),
+        email: email.trim(),
+        subject: subject.trim() || "General Property Inquiry",
+        message: message.trim(),
+      });
+
+      setFeedback({
+        type: "success",
+        text: "Thank you! Your message has been sent to our desk. We will respond promptly.",
+      });
+      setName("");
       setEmail("");
+      setSubject("");
+      setMessage("");
+    } catch (err: unknown) {
+      setFeedback({
+        type: "error",
+        text: (err as Error)?.message || "Failed to send message. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -38,16 +79,14 @@ export default function Footer() {
               </span>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed max-w-sm">
-              Discover unparalleled architectural gems, high-end estates, and
-              urban luxury sanctuaries. We connect discerning buyers and renters
-              with premier properties nationwide.
+              Nigeria&apos;s leading property platform connecting buyers, tenants, and verified property developers with luxury homes, duplexes, serviced apartments, and prime land nationwide.
             </p>
-            <div className="flex items-center gap-4 text-xs text-gray-400 pt-2">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400 pt-2">
               <span className="flex items-center gap-1.5 text-emerald-400">
-                <ShieldCheck className="w-4 h-4" /> Verified Listings
+                <ShieldCheck className="w-4 h-4" /> Title Verified Listings
               </span>
               <span className="flex items-center gap-1.5 text-indigo-400">
-                <Award className="w-4 h-4" /> Premier Agency
+                <Award className="w-4 h-4" /> Premier Nigerian Realty
               </span>
             </div>
           </div>
@@ -78,6 +117,15 @@ export default function Footer() {
               </li>
               <li>
                 <Link
+                  href="/seller"
+                  className="hover:text-indigo-300 text-indigo-400 transition-colors inline-flex items-center gap-1 font-semibold"
+                >
+                  <Briefcase className="w-3.5 h-3.5" />
+                  <span>Seller Portal</span>
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/dashboard"
                   className="hover:text-white transition-colors"
                 >
@@ -90,103 +138,156 @@ export default function Footer() {
                   className="hover:text-indigo-300 text-gray-400 transition-colors inline-flex items-center gap-1"
                 >
                   <Lock className="w-3 h-3" />
-                  <span>Staff Portal</span>
+                  <span>Admin Console</span>
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Popular Cities */}
+          {/* Popular Nigerian Cities */}
           <div className="space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Top Markets
+              Top Nigerian Markets
             </h4>
             <ul className="space-y-2.5 text-sm text-gray-400">
               <li>
                 <Link
-                  href="/properties?city=Beverly+Hills"
+                  href="/properties?city=Ikoyi"
                   className="hover:text-white transition-colors"
                 >
-                  Beverly Hills, CA
+                  Ikoyi &amp; Victoria Island, Lagos
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/properties?city=New+York"
+                  href="/properties?city=Lekki"
                   className="hover:text-white transition-colors"
                 >
-                  Manhattan &amp; Brooklyn, NY
+                  Lekki Phase 1 &amp; Chevron, Lagos
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/properties?city=Miami"
+                  href="/properties?city=Maitama"
                   className="hover:text-white transition-colors"
                 >
-                  Miami &amp; South Beach, FL
+                  Maitama &amp; Asokoro, Abuja
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/properties?city=Austin"
+                  href="/properties?city=Port+Harcourt"
                   className="hover:text-white transition-colors"
                 >
-                  Austin &amp; Hill Country, TX
+                  Old GRA, Port Harcourt
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/properties?city=San+Francisco"
+                  href="/properties?city=Ibadan"
                   className="hover:text-white transition-colors"
                 >
-                  San Francisco Bay Area, CA
+                  Bodija &amp; Oluyole, Ibadan
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/properties?city=Enugu"
+                  className="hover:text-white transition-colors"
+                >
+                  Independence Layout, Enugu
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Newsletter */}
+          {/* Real Contact Form */}
           <div className="space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Private Curations
+            <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Contact Us / Inquiry</span>
             </h4>
             <p className="text-xs text-gray-400 leading-relaxed">
-              Receive confidential off-market briefings and new architectural listings weekly.
+              Send a direct message to our real estate advisory desk.
             </p>
-            {subscribed ? (
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 p-3 rounded-xl border border-emerald-900">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Subscribed to private curations.</span>
+
+            {feedback && (
+              <div
+                className={`p-3 rounded-xl border text-xs leading-relaxed flex items-start gap-2 ${
+                  feedback.type === "success"
+                    ? "bg-emerald-950/40 border-emerald-800 text-emerald-300"
+                    : "bg-red-950/40 border-red-800 text-red-300"
+                }`}
+              >
+                {feedback.type === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                )}
+                <span>{feedback.text}</span>
               </div>
-            ) : (
-              <form onSubmit={handleSubscribe} className="space-y-2">
-                <input
-                  type="email"
-                  required
-                  placeholder="advisor@firm.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer"
-                >
-                  <span>Join Exclusive Access</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </form>
             )}
+
+            <form onSubmit={handleContactSubmit} className="space-y-2">
+              <input
+                type="text"
+                required
+                placeholder="Your Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <input
+                type="email"
+                required
+                placeholder="Your Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <input
+                type="text"
+                placeholder="Subject / Property Interest"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <textarea
+                rows={2}
+                required
+                placeholder="Your message or inquiry..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-800 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+              />
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sending Message...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Send Message to Advisor</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="pt-8 border-t border-gray-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} KIS-Estate Inc. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} KIS-Estate Nigeria. All rights reserved.</p>
           <div className="flex items-center gap-6">
             <span className="hover:text-gray-400 transition-colors">Privacy Policy</span>
             <span className="hover:text-gray-400 transition-colors">Terms of Service</span>
-            <span className="hover:text-gray-400 transition-colors">Equal Housing Opportunity</span>
+            <span className="hover:text-gray-400 transition-colors">Verified Nigerian Housing</span>
           </div>
         </div>
       </div>

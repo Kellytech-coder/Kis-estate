@@ -127,6 +127,10 @@ export const propertiesApi = {
     });
   },
 
+  async getMyProperties(): Promise<{ success: boolean; data: Property[]; count: number }> {
+    return apiRequest<{ success: boolean; data: Property[]; count: number }>("/api/properties/seller/my-properties");
+  },
+
   async delete(id: string): Promise<{ success: boolean; message: string }> {
     return apiRequest<{ success: boolean; message: string }>(`/api/properties/${id}`, {
       method: "DELETE",
@@ -164,6 +168,24 @@ export const inquiriesApi = {
 };
 
 /**
+ * Contact API Endpoints
+ */
+export const contactApi = {
+  async sendMessage(data: {
+    name: string;
+    email: string;
+    phone?: string;
+    subject?: string;
+    message: string;
+  }): Promise<{ success: boolean; message: string }> {
+    return apiRequest<{ success: boolean; message: string }>("/api/contact", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+/**
  * Authentication API Endpoints
  */
 export const authApi = {
@@ -181,9 +203,128 @@ export const authApi = {
     return apiRequest<{ success: boolean; user: User }>("/api/auth/me");
   },
 
+  async updateProfile(profileData: {
+    name?: string;
+    phone?: string;
+    agencyName?: string;
+    preferredCity?: string;
+    photoURL?: string;
+  }): Promise<{ success: boolean; user: User; message: string }> {
+    return apiRequest<{ success: boolean; user: User; message: string }>("/api/auth/profile", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    });
+  },
+
+  async getFavorites(): Promise<{ success: boolean; favorites: string[] }> {
+    return apiRequest<{ success: boolean; favorites: string[] }>("/api/auth/favorites");
+  },
+
+  async addFavorite(propertyId: string): Promise<{ success: boolean; favorites: string[]; message: string }> {
+    return apiRequest<{ success: boolean; favorites: string[]; message: string }>(`/api/auth/favorites/${propertyId}`, {
+      method: "POST",
+    });
+  },
+
+  async removeFavorite(propertyId: string): Promise<{ success: boolean; favorites: string[]; message: string }> {
+    return apiRequest<{ success: boolean; favorites: string[]; message: string }>(`/api/auth/favorites/${propertyId}`, {
+      method: "DELETE",
+    });
+  },
+
   async logout(): Promise<{ success: boolean; message: string }> {
     return apiRequest<{ success: boolean; message: string }>("/api/auth/logout", {
       method: "POST",
+    });
+  },
+};
+
+/**
+ * Admin API Endpoints
+ */
+export interface AdminStats {
+  totalProperties: number;
+  activeListings: number;
+  pendingListings: number;
+  soldListings: number;
+  rentedListings: number;
+  buyListings: number;
+  rentListings: number;
+  totalValueBuy: number;
+  totalValueRent: number;
+  totalUsers: number;
+  totalSellers: number;
+  totalBuyers: number;
+  totalAdmins: number;
+  totalInquiries: number;
+  pendingInquiries: number;
+  completedInquiries: number;
+  totalContactMessages: number;
+  recentProperties: Array<{
+    id: string;
+    title: string;
+    price: number;
+    type: string;
+    city: string;
+    status: string;
+    images: string[];
+    createdAt: string;
+  }>;
+  recentInquiries: Array<{
+    id: string;
+    propertyTitle: string;
+    userName: string;
+    userEmail: string;
+    message: string;
+    status: string;
+    createdAt: string;
+  }>;
+  recentUsers: Array<{
+    uid: string;
+    name: string;
+    email: string;
+    role: string;
+    phone: string;
+    agencyName: string;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminUser {
+  uid: string;
+  name: string;
+  email: string;
+  role: string;
+  phone: string;
+  agencyName: string;
+  preferredCity: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const adminApi = {
+  async getStats(): Promise<{ success: boolean; data: AdminStats }> {
+    return apiRequest<{ success: boolean; data: AdminStats }>("/api/admin/stats");
+  },
+
+  async getUsers(): Promise<{ success: boolean; count: number; data: AdminUser[] }> {
+    return apiRequest<{ success: boolean; count: number; data: AdminUser[] }>("/api/admin/users");
+  },
+
+  async updateUser(
+    id: string,
+    data: Partial<AdminUser>
+  ): Promise<{ success: boolean; message: string; data: AdminUser }> {
+    return apiRequest<{ success: boolean; message: string; data: AdminUser }>(`/api/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteUser(id: string): Promise<{ success: boolean; message: string }> {
+    return apiRequest<{ success: boolean; message: string }>(`/api/admin/users/${id}`, {
+      method: "DELETE",
     });
   },
 };

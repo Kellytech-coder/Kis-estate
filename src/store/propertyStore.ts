@@ -11,7 +11,8 @@ export interface PropertyLocation {
   address: string;
   city: string;
   state: string;
-  zipCode: string;
+  lga?: string;
+  zipCode?: string;
   country: string;
 }
 
@@ -19,17 +20,26 @@ export interface PropertyAgent {
   name: string;
   email: string;
   phone: string;
-  avatar: string;
-  agency: string;
+  avatar?: string;
+  agency?: string;
 }
 
 export type PropertyType =
+  | "duplex"
+  | "flat"
+  | "bungalow"
   | "house"
   | "apartment"
+  | "land"
+  | "office"
+  | "shop"
+  | "commercial"
+  | "terrace"
+  | "mansion"
+  | "penthouse"
   | "villa"
   | "condo"
-  | "townhouse"
-  | "penthouse";
+  | "townhouse";
 
 export type ListingType = "buy" | "rent";
 
@@ -43,6 +53,7 @@ export interface Property {
   location: PropertyLocation;
   bedrooms: number;
   bathrooms: number;
+  parking?: number;
   areaSqFt: number;
   images: string[];
   featured: boolean;
@@ -50,6 +61,7 @@ export interface Property {
   yearBuilt: number;
   status: "available" | "pending" | "sold" | "rented";
   agent: PropertyAgent;
+  createdById?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -88,7 +100,10 @@ export interface User {
   uid?: string;
   name: string;
   email: string;
-  role: "USER" | "ADMIN" | "user" | "admin";
+  role: "BUYER_RENTER" | "SELLER_PROPERTY_OWNER" | "ADMIN" | "USER" | "user" | "admin";
+  phone?: string;
+  agencyName?: string;
+  preferredCity?: string;
   avatar?: string;
   photoURL?: string;
 }
@@ -182,15 +197,24 @@ export const usePropertyStore = create<PropertyStore>()(
           filters: INITIAL_FILTERS,
         })),
 
-      toggleFavorite: (id) =>
-        set((state) => {
-          const exists = state.favorites.includes(id);
-          return {
-            favorites: exists
-              ? state.favorites.filter((favId) => favId !== id)
-              : [...state.favorites, id],
-          };
-        }),
+      toggleFavorite: (id) => {
+        const state = get();
+        const exists = state.favorites.includes(id);
+        const newFavorites = exists
+          ? state.favorites.filter((favId) => favId !== id)
+          : [...state.favorites, id];
+
+        set({ favorites: newFavorites });
+
+        // Persist to backend / Firestore if user is authenticated
+        if (state.currentUser?.uid) {
+          if (exists) {
+            authApi.removeFavorite(id).catch((e) => console.warn("Failed to sync removed favorite:", e));
+          } else {
+            authApi.addFavorite(id).catch((e) => console.warn("Failed to sync added favorite:", e));
+          }
+        }
+      },
 
       isFavorite: (id) => get().favorites.includes(id),
 
@@ -327,16 +351,32 @@ export const usePropertyStore = create<PropertyStore>()(
           try {
             // Read user role and details from Firestore users/{uid}
             const userDoc = await getDoc(doc(db, "users", fbUser.uid));
-            let role: "user" | "admin" = "user";
+            let role: User["role"] = "BUYER_RENTER";
             let name = fbUser.displayName || "User";
+            let phone = "";
+            let agencyName = "";
+            let preferredCity = "";
 
             if (userDoc.exists()) {
               const data = userDoc.data();
-              if (data.role?.toUpperCase() === "ADMIN") {
-                role = "admin";
+              const dbRole = (data.role || "BUYER_RENTER").toUpperCase();
+              if (dbRole === "ADMIN") {
+                role = "ADMIN";
+              } else if (dbRole === "SELLER_PROPERTY_OWNER" || dbRole === "SELLER") {
+                role = "SELLER_PROPERTY_OWNER";
+              } else {
+                role = "BUYER_RENTER";
               }
-              if (data.name) {
-                name = data.name;
+              if (data.name) name = data.name;
+              if (data.phone) phone = data.phone;
+              if (data.agencyName) agencyName = data.agencyName;
+              if (data.preferredCity) preferredCity = data.preferredCity;
+
+              if (Array.isArray(data.savedProperties)) {
+                // Merge remote saved properties with local favorites
+                set((s) => ({
+                  favorites: Array.from(new Set([...s.favorites, ...data.savedProperties])),
+                }));
               }
             }
 
@@ -347,9 +387,12 @@ export const usePropertyStore = create<PropertyStore>()(
                 email: fbUser.email || "",
                 name,
                 role,
+                phone,
+                agencyName,
+                preferredCity,
                 avatar:
                   fbUser.photoURL ||
-                  (role === "admin"
+                  (role === "ADMIN"
                     ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
                     : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80"),
               },
@@ -363,7 +406,7 @@ export const usePropertyStore = create<PropertyStore>()(
                 uid: fbUser.uid,
                 email: fbUser.email || "",
                 name: fbUser.displayName || "User",
-                role: "user",
+                role: "BUYER_RENTER",
               },
               isLoadingUser: false,
             });
