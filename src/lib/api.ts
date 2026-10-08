@@ -3,17 +3,39 @@ import { Property, Inquiry, User, FilterState } from "@/store/propertyStore";
 
 /**
  * Production API Base URL
- * Defaults to http://localhost:4000 in development,
- * and uses NEXT_PUBLIC_API_URL when deployed to Vercel/Production.
+ * - Uses NEXT_PUBLIC_API_URL when set.
+ * - In local dev (localhost/127.0.0.1), defaults to http://localhost:4000.
+ * - In production/mobile (when accessed from non-localhost), if NEXT_PUBLIC_API_URL is omitted,
+ *   defaults to same-origin relative path "" which Next.js rewrites to the deployed backend.
  */
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:4000";
+export const API_BASE_URL = (() => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const isLocal =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    if (!isLocal) {
+      return "";
+    }
+  }
+  return "http://localhost:4000";
+})();
 
 /**
  * Get current user's Firebase ID token
+ * Awaits auth.authStateReady() so mobile refreshes never prematurely send unauthenticated requests.
  */
 export async function getFirebaseIdToken(forceRefresh = false): Promise<string | null> {
+  if (!auth.currentUser && typeof auth.authStateReady === "function") {
+    try {
+      await auth.authStateReady();
+    } catch {
+      // ignore
+    }
+  }
+
   if (!auth.currentUser) return null;
   try {
     return await auth.currentUser.getIdToken(forceRefresh);
@@ -81,8 +103,14 @@ export async function apiRequest<T = unknown>(
     return data as T;
   } catch (err: unknown) {
     if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
       const networkError = new Error(
-        `Unable to reach API server at ${API_BASE_URL}. Please check your connection.`
+        isLocalhost
+          ? `Unable to reach local API server at ${API_BASE_URL}. Ensure the backend server is running.`
+          : "Unable to connect to the property listing service. Please check your internet connection and try again."
       ) as Error & { status?: number };
       networkError.status = 0;
       throw networkError;

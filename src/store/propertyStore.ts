@@ -349,8 +349,11 @@ export const usePropertyStore = create<PropertyStore>()(
           }
 
           try {
-            // Read user role and details from Firestore users/{uid}
-            const userDoc = await getDoc(doc(db, "users", fbUser.uid));
+            // Read user role and details from Firestore users/{uid} (or legacy user/{uid})
+            let userDoc = await getDoc(doc(db, "users", fbUser.uid));
+            if (!userDoc.exists()) {
+              userDoc = await getDoc(doc(db, "user", fbUser.uid));
+            }
             let role: User["role"] = "BUYER_RENTER";
             let name = fbUser.displayName || "User";
             let phone = "";

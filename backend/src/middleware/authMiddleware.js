@@ -33,12 +33,19 @@ const authenticate = async (req, res, next) => {
     // Attach Firebase user information to request
     req.user = decodedToken;
 
-    // Try to load the user's Firestore profile
+    // Try to load the user's Firestore profile (supporting users and legacy user)
     try {
-      const userSnapshot = await db
+      let userSnapshot = await db
         .collection("users")
         .doc(decodedToken.uid)
         .get();
+
+      if (!userSnapshot.exists) {
+        userSnapshot = await db
+          .collection("user")
+          .doc(decodedToken.uid)
+          .get();
+      }
 
       if (userSnapshot.exists) {
         req.userProfile = userSnapshot.data();

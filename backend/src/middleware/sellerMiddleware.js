@@ -9,10 +9,17 @@ const requireSellerOrAdmin = async (req, res, next) => {
       });
     }
 
-    const userSnapshot = await db
+    let userSnapshot = await db
       .collection("users")
       .doc(req.user.uid)
       .get();
+
+    if (!userSnapshot.exists) {
+      userSnapshot = await db
+        .collection("user")
+        .doc(req.user.uid)
+        .get();
+    }
 
     if (!userSnapshot.exists) {
       return res.status(403).json({

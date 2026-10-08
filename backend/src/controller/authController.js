@@ -21,9 +21,18 @@ const login = async (req, res) => {
     // Get Firebase Authentication user
     const userRecord = await auth.getUser(uid);
 
-    // Find Firestore user profile in 'users' collection
-    const userRef = db.collection("users").doc(uid);
-    const userSnapshot = await userRef.get();
+    // Find Firestore user profile in 'users' collection (with fallback to 'user')
+    let userRef = db.collection("users").doc(uid);
+    let userSnapshot = await userRef.get();
+
+    if (!userSnapshot.exists) {
+      const legacyRef = db.collection("user").doc(uid);
+      const legacySnapshot = await legacyRef.get();
+      if (legacySnapshot.exists) {
+        userRef = legacyRef;
+        userSnapshot = legacySnapshot;
+      }
+    }
 
     if (!userSnapshot.exists) {
       return res.status(403).json({
@@ -106,7 +115,11 @@ const getMe = async (req, res) => {
     }
 
     const userRecord = await auth.getUser(uid);
-    const userSnapshot = await db.collection("users").doc(uid).get();
+    let userSnapshot = await db.collection("users").doc(uid).get();
+
+    if (!userSnapshot.exists) {
+      userSnapshot = await db.collection("user").doc(uid).get();
+    }
 
     if (!userSnapshot.exists) {
       return res.status(200).json({
