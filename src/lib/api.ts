@@ -231,6 +231,20 @@ export const authApi = {
     return apiRequest<{ success: boolean; user: User }>("/api/auth/me");
   },
 
+  async registerProfile(profileData: {
+    name: string;
+    email?: string;
+    phone?: string;
+    agencyName?: string;
+    preferredCity?: string;
+    role: "BUYER_RENTER" | "SELLER_PROPERTY_OWNER";
+  }): Promise<{ success: boolean; user: User; message: string }> {
+    return apiRequest<{ success: boolean; user: User; message: string }>("/api/auth/register-profile", {
+      method: "POST",
+      body: JSON.stringify(profileData),
+    });
+  },
+
   async updateProfile(profileData: {
     name?: string;
     phone?: string;

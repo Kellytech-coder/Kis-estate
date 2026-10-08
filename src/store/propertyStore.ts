@@ -350,17 +350,23 @@ export const usePropertyStore = create<PropertyStore>()(
 
           try {
             // Read user role and details from Firestore users/{uid} (or legacy user/{uid})
-            let userDoc = await getDoc(doc(db, "users", fbUser.uid));
-            if (!userDoc.exists()) {
-              userDoc = await getDoc(doc(db, "user", fbUser.uid));
+            let userDoc = null;
+            try {
+              userDoc = await getDoc(doc(db, "users", fbUser.uid));
+              if (!userDoc.exists()) {
+                userDoc = await getDoc(doc(db, "user", fbUser.uid));
+              }
+            } catch (firestoreErr) {
+              console.warn("Direct Firestore read restricted; will fetch via authApi:", firestoreErr);
             }
+
             let role: User["role"] = "BUYER_RENTER";
             let name = fbUser.displayName || "User";
             let phone = "";
             let agencyName = "";
             let preferredCity = "";
 
-            if (userDoc.exists()) {
+            if (userDoc && userDoc.exists()) {
               const data = userDoc.data();
               const dbRole = (data.role || "BUYER_RENTER").toUpperCase();
               if (dbRole === "ADMIN") {
@@ -380,6 +386,23 @@ export const usePropertyStore = create<PropertyStore>()(
                 set((s) => ({
                   favorites: Array.from(new Set([...s.favorites, ...data.savedProperties])),
                 }));
+              }
+            } else {
+              // Direct client read was not available or doc not found, query backend authApi.getMe()
+              try {
+                const meRes = await authApi.getMe();
+                if (meRes?.user) {
+                  const dbRole = (meRes.user.role || "BUYER_RENTER").toUpperCase();
+                  if (dbRole === "ADMIN") role = "ADMIN";
+                  else if (dbRole === "SELLER_PROPERTY_OWNER" || dbRole === "SELLER") role = "SELLER_PROPERTY_OWNER";
+                  else role = "BUYER_RENTER";
+                  if (meRes.user.name) name = meRes.user.name;
+                  if (meRes.user.phone) phone = meRes.user.phone;
+                  if (meRes.user.agencyName) agencyName = meRes.user.agencyName;
+                  if (meRes.user.preferredCity) preferredCity = meRes.user.preferredCity;
+                }
+              } catch (apiErr) {
+                console.warn("Backend authApi.getMe fallback failed:", apiErr);
               }
             }
 

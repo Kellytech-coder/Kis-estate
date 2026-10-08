@@ -7,6 +7,7 @@ const {
   logout,
   getMe,
   updateProfile,
+  registerProfile,
   getFavorites,
   addFavorite,
   removeFavorite,
@@ -30,6 +31,11 @@ router.post("/logout", authenticate, logout);
 // CURRENT AUTHENTICATED USER
 // ===============================
 router.get("/me", authenticate, getMe);
+
+// ===============================
+// REGISTER / INITIALIZE PROFILE
+// ===============================
+router.post("/register-profile", authenticate, registerProfile);
 
 // ===============================
 // UPDATE PROFILE

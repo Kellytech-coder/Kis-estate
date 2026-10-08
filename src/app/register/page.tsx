@@ -19,6 +19,7 @@ import {
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { authApi } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -68,30 +69,67 @@ export default function RegisterPage() {
       const user = userCredential.user;
 
       // 2. Set Firebase Auth display name
-      await updateProfile(user, {
-        displayName: cleanName,
-      });
+      try {
+        await updateProfile(user, {
+          displayName: cleanName,
+        });
+      } catch (profileErr) {
+        console.warn("Failed to update Auth display name:", profileErr);
+      }
 
-      // 3. Create user document in Firestore users/{uid}
-      // Strictly assign selected role (BUYER_RENTER or SELLER_PROPERTY_OWNER)
-      const userProfile = {
-        uid: user.uid,
-        name: cleanName,
-        email: normalizedEmail,
-        phone: cleanPhone || null,
-        agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : null,
-        role: accountType,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // 3. Register user profile via backend Admin SDK (bypasses Firestore client security rules)
+      let backendSuccess = false;
+      try {
+        await authApi.registerProfile({
+          name: cleanName,
+          email: normalizedEmail,
+          phone: cleanPhone || undefined,
+          agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
+          role: accountType,
+        });
+        backendSuccess = true;
+      } catch (backendErr) {
+        console.warn("Backend register-profile API call encountered an error:", backendErr);
+      }
 
-      await setDoc(doc(db, "users", user.uid), userProfile);
+      // 4. Client-side setDoc fallback (attempted, but won't throw permission-denied to user if backend succeeded)
+      try {
+        const userProfile = {
+          uid: user.uid,
+          name: cleanName,
+          email: normalizedEmail,
+          phone: cleanPhone || null,
+          agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : null,
+          role: accountType,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
 
+        await setDoc(doc(db, "users", user.uid), userProfile, { merge: true });
+      } catch (fsErr) {
+        console.info("Direct client Firestore write restricted; backend Admin SDK handled profile creation.", fsErr);
+        if (!backendSuccess) {
+          // If BOTH backend and client Firestore write failed, retry backend profile endpoint
+          try {
+            await authApi.registerProfile({
+              name: cleanName,
+              email: normalizedEmail,
+              phone: cleanPhone || undefined,
+              agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
+              role: accountType,
+            });
+          } catch (retryErr) {
+            console.error("Profile creation retry failed:", retryErr);
+          }
+        }
+      }
+
+      // 5. Navigate to appropriate dashboard based on selected role
       if (accountType === "SELLER_PROPERTY_OWNER") {
-        router.push("/seller");
+        router.replace("/seller");
       } else {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       }
     } catch (err: unknown) {
       const fbErr = err as { code?: string; message?: string };
@@ -105,7 +143,7 @@ export default function RegisterPage() {
           setErrorMsg("Please enter a valid email address.");
           break;
         case "auth/weak-password":
-          setErrorMsg("The password provided is too weak. Please use a stronger password.");
+          setErrorMsg("The password provided is too weak. Please use a password with at least 6 characters.");
           break;
         case "auth/network-request-failed":
           setErrorMsg("Network connection error. Please check your internet connection.");

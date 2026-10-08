@@ -122,6 +122,18 @@ const getMe = async (req, res) => {
     }
 
     if (!userSnapshot.exists) {
+      // Auto-create base profile in Firestore to ensure consistency across web and mobile
+      const defaultProfile = {
+        uid: userRecord.uid,
+        email: userRecord.email || null,
+        name: userRecord.displayName || "User",
+        role: "BUYER_RENTER",
+        isActive: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await db.collection("users").doc(uid).set(defaultProfile, { merge: true });
+
       return res.status(200).json({
         success: true,
         user: {
@@ -210,6 +222,86 @@ const updateProfile = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update profile",
+    });
+  }
+};
+
+// ========================================
+// REGISTER / CREATE USER PROFILE (/api/auth/register-profile)
+// ========================================
+const registerProfile = async (req, res) => {
+  try {
+    const uid = req.user?.uid;
+
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { name, phone, agencyName, preferredCity, role } = req.body;
+    const email = req.user.email || req.body.email || null;
+
+    // Restrict role selection for security: client cannot register as ADMIN
+    const allowedRole = role === "SELLER_PROPERTY_OWNER" ? "SELLER_PROPERTY_OWNER" : "BUYER_RENTER";
+    const cleanName = name ? String(name).trim() : (req.user.name || "User");
+    const cleanPhone = phone ? String(phone).trim() : null;
+    const cleanAgency = allowedRole === "SELLER_PROPERTY_OWNER"
+      ? (agencyName ? String(agencyName).trim() : "Independent Owner")
+      : null;
+    const cleanCity = preferredCity ? String(preferredCity).trim() : "";
+
+    const userRef = db.collection("users").doc(uid);
+    const existingDoc = await userRef.get();
+
+    const userProfile = {
+      uid,
+      name: cleanName,
+      email: email ? String(email).trim().toLowerCase() : null,
+      phone: cleanPhone,
+      agencyName: cleanAgency,
+      preferredCity: cleanCity,
+      role: allowedRole,
+      isActive: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (!existingDoc.exists) {
+      userProfile.createdAt = admin.firestore.FieldValue.serverTimestamp();
+      await userRef.set(userProfile);
+    } else {
+      const existingData = existingDoc.data() || {};
+      // Never downgrade an existing ADMIN role
+      if (existingData.role === "ADMIN") {
+        delete userProfile.role;
+      }
+      await userRef.set(userProfile, { merge: true });
+    }
+
+    const finalDoc = await userRef.get();
+    const finalData = finalDoc.data() || {};
+
+    return res.status(200).json({
+      success: true,
+      message: "User profile created successfully",
+      user: {
+        uid,
+        email: finalData.email || userProfile.email,
+        name: finalData.name || userProfile.name,
+        role: finalData.role || allowedRole,
+        phone: finalData.phone || "",
+        agencyName: finalData.agencyName || "",
+        preferredCity: finalData.preferredCity || "",
+      },
+    });
+  } catch (error) {
+    console.error("Register profile error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create user profile",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -311,6 +403,7 @@ module.exports = {
   logout,
   getMe,
   updateProfile,
+  registerProfile,
   getFavorites,
   addFavorite,
   removeFavorite,
