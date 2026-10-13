@@ -49,6 +49,12 @@ const authenticate = async (req, res, next) => {
 
       if (userSnapshot.exists) {
         req.userProfile = userSnapshot.data();
+        if (req.userProfile.isActive === false) {
+          return res.status(403).json({
+            success: false,
+            message: "Your account is inactive",
+          });
+        }
       } else {
         req.userProfile = null;
       }

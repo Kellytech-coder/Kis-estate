@@ -2,6 +2,13 @@ const { db, admin } = require("../config/firebase");
 
 const inquiries = db.collection("inquiries");
 
+const isInquiryOwnerOrAdmin = (data, req) => {
+  const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
+  const isOwner = data.userId === req.user?.uid ||
+    (req.user?.email && String(data.userEmail || data.email || "").toLowerCase() === req.user.email.toLowerCase());
+  return isAdmin || isOwner;
+};
+
 const formatInquiryDoc = (doc) => {
   const data = doc.data();
   const createdAt =
@@ -32,7 +39,7 @@ const formatInquiryDoc = (doc) => {
 // ========================================
 const getInquiries = async (req, res, next) => {
   try {
-    const isAdmin = req.userProfile?.role === "ADMIN";
+    const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
     const userId = req.user?.uid;
 
     const snapshot = await inquiries.get();
@@ -76,6 +83,10 @@ const getInquiry = async (req, res, next) => {
         success: false,
         message: "Inquiry not found",
       });
+    }
+
+    if (!isInquiryOwnerOrAdmin(doc.data(), req)) {
+      return res.status(403).json({ success: false, message: "You are not authorized to view this inquiry" });
     }
 
     res.json({
@@ -186,12 +197,25 @@ const updateInquiry = async (req, res, next) => {
       });
     }
 
+    const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
+    if (!isInquiryOwnerOrAdmin(snapshot.data(), req)) {
+      return res.status(403).json({ success: false, message: "You are not authorized to update this inquiry" });
+    }
+
     const updates = {};
-    if (req.body.status) {
-      updates.status = req.body.status.toLowerCase();
+    if (req.body.status && isAdmin) {
+      const allowedStatuses = ["pending", "confirmed", "completed", "cancelled"];
+      const status = String(req.body.status).toLowerCase();
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: "Invalid inquiry status" });
+      }
+      updates.status = status;
+    }
+    if (req.body.message !== undefined && !isAdmin) {
+      return res.status(403).json({ success: false, message: "Only administrators can edit inquiry messages" });
     }
     if (req.body.message !== undefined) {
-      updates.message = req.body.message;
+      updates.message = String(req.body.message).trim();
     }
 
     updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -223,6 +247,10 @@ const deleteInquiry = async (req, res, next) => {
         success: false,
         message: "Inquiry not found",
       });
+    }
+
+    if (!isInquiryOwnerOrAdmin(snapshot.data(), req)) {
+      return res.status(403).json({ success: false, message: "You are not authorized to delete this inquiry" });
     }
 
     await ref.delete();

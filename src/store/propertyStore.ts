@@ -3,9 +3,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { propertiesApi, inquiriesApi, authApi } from "@/lib/api";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
 
 export interface PropertyLocation {
   address: string;
@@ -349,93 +348,29 @@ export const usePropertyStore = create<PropertyStore>()(
           }
 
           try {
-            // Read user role and details from Firestore users/{uid} (or legacy user/{uid})
-            let userDoc = null;
-            try {
-              userDoc = await getDoc(doc(db, "users", fbUser.uid));
-              if (!userDoc.exists()) {
-                userDoc = await getDoc(doc(db, "user", fbUser.uid));
-              }
-            } catch (firestoreErr) {
-              console.warn("Direct Firestore read restricted; will fetch via authApi:", firestoreErr);
-            }
-
-            let role: User["role"] = "BUYER_RENTER";
-            let name = fbUser.displayName || "User";
-            let phone = "";
-            let agencyName = "";
-            let preferredCity = "";
-
-            if (userDoc && userDoc.exists()) {
-              const data = userDoc.data();
-              const dbRole = (data.role || "BUYER_RENTER").toUpperCase();
-              if (dbRole === "ADMIN") {
-                role = "ADMIN";
-              } else if (dbRole === "SELLER_PROPERTY_OWNER" || dbRole === "SELLER") {
-                role = "SELLER_PROPERTY_OWNER";
-              } else {
-                role = "BUYER_RENTER";
-              }
-              if (data.name) name = data.name;
-              if (data.phone) phone = data.phone;
-              if (data.agencyName) agencyName = data.agencyName;
-              if (data.preferredCity) preferredCity = data.preferredCity;
-
-              if (Array.isArray(data.savedProperties)) {
-                // Merge remote saved properties with local favorites
-                set((s) => ({
-                  favorites: Array.from(new Set([...s.favorites, ...data.savedProperties])),
-                }));
-              }
-            } else {
-              // Direct client read was not available or doc not found, query backend authApi.getMe()
-              try {
-                const meRes = await authApi.getMe();
-                if (meRes?.user) {
-                  const dbRole = (meRes.user.role || "BUYER_RENTER").toUpperCase();
-                  if (dbRole === "ADMIN") role = "ADMIN";
-                  else if (dbRole === "SELLER_PROPERTY_OWNER" || dbRole === "SELLER") role = "SELLER_PROPERTY_OWNER";
-                  else role = "BUYER_RENTER";
-                  if (meRes.user.name) name = meRes.user.name;
-                  if (meRes.user.phone) phone = meRes.user.phone;
-                  if (meRes.user.agencyName) agencyName = meRes.user.agencyName;
-                  if (meRes.user.preferredCity) preferredCity = meRes.user.preferredCity;
-                }
-              } catch (apiErr) {
-                console.warn("Backend authApi.getMe fallback failed:", apiErr);
-              }
-            }
-
+            const { user } = await authApi.getMe();
+            const role = (user.role || "BUYER_RENTER").toUpperCase();
             set({
               currentUser: {
+                ...user,
                 id: fbUser.uid,
                 uid: fbUser.uid,
-                email: fbUser.email || "",
-                name,
-                role,
-                phone,
-                agencyName,
-                preferredCity,
-                avatar:
-                  fbUser.photoURL ||
-                  (role === "ADMIN"
-                    ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
-                    : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80"),
+                email: user.email || fbUser.email || "",
+                name: user.name || fbUser.displayName || "User",
+                role: role === "ADMIN" ? "ADMIN" : role === "SELLER" || role === "SELLER_PROPERTY_OWNER" ? "SELLER_PROPERTY_OWNER" : "BUYER_RENTER",
+                avatar: user.photoURL || fbUser.photoURL || undefined,
               },
               isLoadingUser: false,
             });
+            const favoritesRes = await authApi.getFavorites().catch(() => null);
+            if (favoritesRes) set({ favorites: favoritesRes.favorites || [] });
           } catch (err) {
-            console.error("Error retrieving user profile from Firestore:", err);
+            console.error("Unable to retrieve authenticated profile from API:", err);
             set({
-              currentUser: {
-                id: fbUser.uid,
-                uid: fbUser.uid,
-                email: fbUser.email || "",
-                name: fbUser.displayName || "User",
-                role: "BUYER_RENTER",
-              },
+              currentUser: null,
               isLoadingUser: false,
             });
+            await signOut(auth).catch(() => undefined);
           }
         });
 

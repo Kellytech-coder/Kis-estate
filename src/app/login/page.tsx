@@ -13,13 +13,14 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
+import { usePropertyStore } from "@/store/propertyStore";
 
 export default function LoginPage() {
   const router = useRouter();
+  const setCurrentUser = usePropertyStore((state) => state.setCurrentUser);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,49 +41,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-      const uid = userCredential.user.uid;
-      
-      // 1. Direct Firestore profile check (instant, works on mobile without requiring backend port)
-      try {
-        let userDoc = await getDoc(doc(db, "users", uid));
-        if (!userDoc.exists()) {
-          userDoc = await getDoc(doc(db, "user", uid));
-        }
-
-        if (userDoc.exists()) {
-          const profile = userDoc.data();
-          const userRole = (profile?.role || "BUYER_RENTER").toUpperCase();
-          if (userRole === "ADMIN") {
-            router.replace("/admin");
-            return;
-          } else if (userRole === "SELLER_PROPERTY_OWNER" || userRole === "SELLER") {
-            router.replace("/seller");
-            return;
-          }
-          router.replace("/dashboard");
-          return;
-        }
-      } catch (dbErr) {
-        console.warn("Direct Firestore role check failed, falling back to authApi:", dbErr);
-      }
-
-      // 2. Secondary fallback via backend authApi
-      try {
-        const meRes = await authApi.getMe();
-        const userRole = (meRes.user?.role || "").toUpperCase();
-        if (userRole === "ADMIN") {
-          router.replace("/admin");
-          return;
-        } else if (userRole === "SELLER_PROPERTY_OWNER" || userRole === "SELLER") {
-          router.replace("/seller");
-          return;
-        }
-      } catch {
-        // Fallback to /dashboard if role lookup fails
-      }
-
-      router.replace("/dashboard");
+      await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      // Fetch the trusted profile and role from the API after Firebase validates credentials.
+      const meResponse = await authApi.getMe().catch(async (profileError) => {
+        await signOut(auth).catch(() => undefined);
+        setCurrentUser(null);
+        throw profileError;
+      });
+      const { user } = meResponse;
+      setCurrentUser(user);
+      const role = (user.role || "BUYER_RENTER").toUpperCase();
+      router.replace(role === "ADMIN" ? "/admin" : role === "SELLER" || role === "SELLER_PROPERTY_OWNER" ? "/seller" : "/dashboard");
     } catch (err: unknown) {
       const fbErr = err as { code?: string; message?: string };
       console.error("Login failed:", err);

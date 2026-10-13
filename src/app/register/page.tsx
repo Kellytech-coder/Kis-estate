@@ -16,13 +16,14 @@ import {
   CheckCircle2,
   Home,
 } from "lucide-react";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { createUserWithEmailAndPassword, deleteUser, updateProfile } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
+import { usePropertyStore } from "@/store/propertyStore";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const setCurrentUser = usePropertyStore((state) => state.setCurrentUser);
 
   const [accountType, setAccountType] = useState<"BUYER_RENTER" | "SELLER_PROPERTY_OWNER">("BUYER_RENTER");
   const [name, setName] = useState("");
@@ -78,51 +79,20 @@ export default function RegisterPage() {
       }
 
       // 3. Register user profile via backend Admin SDK (bypasses Firestore client security rules)
-      let backendSuccess = false;
       try {
-        await authApi.registerProfile({
+        const profile = await authApi.registerProfile({
           name: cleanName,
           email: normalizedEmail,
           phone: cleanPhone || undefined,
           agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
           role: accountType,
         });
-        backendSuccess = true;
-      } catch (backendErr) {
-        console.warn("Backend register-profile API call encountered an error:", backendErr);
-      }
-
-      // 4. Client-side setDoc fallback (attempted, but won't throw permission-denied to user if backend succeeded)
-      try {
-        const userProfile = {
-          uid: user.uid,
-          name: cleanName,
-          email: normalizedEmail,
-          phone: cleanPhone || null,
-          agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : null,
-          role: accountType,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        await setDoc(doc(db, "users", user.uid), userProfile, { merge: true });
-      } catch (fsErr) {
-        console.info("Direct client Firestore write restricted; backend Admin SDK handled profile creation.", fsErr);
-        if (!backendSuccess) {
-          // If BOTH backend and client Firestore write failed, retry backend profile endpoint
-          try {
-            await authApi.registerProfile({
-              name: cleanName,
-              email: normalizedEmail,
-              phone: cleanPhone || undefined,
-              agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
-              role: accountType,
-            });
-          } catch (retryErr) {
-            console.error("Profile creation retry failed:", retryErr);
-          }
-        }
+        if (!profile.user) throw new Error("Your account was created, but its profile could not be loaded.");
+        setCurrentUser(profile.user);
+      } catch (profileError) {
+        // Roll back the newly created Firebase account if its backend profile could not be saved.
+        try { await deleteUser(user); } catch { /* Firebase may require a fresh login to delete. */ }
+        throw profileError;
       }
 
       // 5. Navigate to appropriate dashboard based on selected role
