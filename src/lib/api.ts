@@ -5,12 +5,17 @@ import { Property, Inquiry, User, FilterState } from "@/store/propertyStore";
  * Production API Base URL
  * - Uses NEXT_PUBLIC_API_URL when set.
  * - In local dev (localhost/127.0.0.1), defaults to http://localhost:4000.
- * - In production/mobile (when accessed from non-localhost), if NEXT_PUBLIC_API_URL is omitted,
- *   defaults to same-origin relative path "" which Next.js rewrites to the deployed backend.
+ * - In production, NEXT_PUBLIC_API_URL must point to the deployed Express API.
+ *   Never silently send production requests to localhost.
  */
 export const API_BASE_URL = (() => {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configuredUrl) {
+    const normalizedUrl = configuredUrl.replace(/\/$/, "");
+    const pointsToLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(normalizedUrl);
+    // A browser visiting the deployed site cannot reach the developer's localhost.
+    if (process.env.NODE_ENV === "production" && pointsToLocalhost) return "";
+    return normalizedUrl;
   }
   if (typeof window !== "undefined") {
     const isLocal =
@@ -52,6 +57,12 @@ export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  if (!API_BASE_URL && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "The property API is not configured. Set NEXT_PUBLIC_API_URL to the deployed backend URL in Vercel, then redeploy."
+    );
+  }
+
   const url = `${API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
   const headers: Record<string, string> = {
@@ -88,11 +99,16 @@ export async function apiRequest<T = unknown>(
     }
 
     if (!response.ok) {
-      const errorMessage =
+      const responseMessage =
         (typeof data?.message === "string" ? data.message : null) ||
         (typeof (data?.error as { message?: string })?.message === "string"
           ? (data.error as { message: string }).message
-          : null) ||
+          : null);
+      const isMissingApiRoute = response.status === 404 &&
+        (!responseMessage || /route not found|page could not be found/i.test(responseMessage));
+      const errorMessage = isMissingApiRoute
+        ? `API endpoint ${endpoint} was not found. Set NEXT_PUBLIC_API_URL to the deployed Express backend URL and redeploy.`
+        : responseMessage ||
         `Request failed with status ${response.status} (${response.statusText})`;
       const error = new Error(errorMessage) as Error & { status?: number; data?: unknown };
       error.status = response.status;

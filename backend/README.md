@@ -21,7 +21,7 @@ The health endpoint is `GET /api/health`. It reports that the API is running; it
 
 ## Frontend connection
 
-The Next.js app uses `NEXT_PUBLIC_API_URL` as the API base URL. For local development this can be `http://localhost:4000`; add it to the root `.env.local` if needed. Production deployments must point it at the deployed API URL. Firebase browser configuration values may be public; service-account credentials must never use `NEXT_PUBLIC_*` variables.
+The Next.js app uses `NEXT_PUBLIC_API_URL` as the API base URL. For local development this can be `http://localhost:4000`; add it to the root `.env.local` if needed. Set it to the deployed Express API URL in the Vercel project’s Environment Variables for every deployed environment, then redeploy. Production builds do not fall back to localhost. Firebase browser configuration values may be public; service-account credentials must never use `NEXT_PUBLIC_*` variables.
 
 ## Data collections
 
