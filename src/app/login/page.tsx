@@ -14,9 +14,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
 import { usePropertyStore } from "@/store/propertyStore";
+import type { User } from "@/store/propertyStore";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,14 +43,36 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      const { user: firebaseUser } = await signInWithEmailAndPassword(auth, normalizedEmail, password);
       // Fetch the trusted profile and role from the API after Firebase validates credentials.
-      const meResponse = await authApi.getMe().catch(async (profileError) => {
-        await signOut(auth).catch(() => undefined);
-        setCurrentUser(null);
-        throw profileError;
-      });
-      const { user } = meResponse;
+      let user: User;
+      try {
+        ({ user } = await authApi.getMe());
+      } catch (profileError) {
+        let profileDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+        if (!profileDoc.exists()) profileDoc = await getDoc(doc(db, "user", firebaseUser.uid));
+        if (!profileDoc.exists()) {
+          await signOut(auth).catch(() => undefined);
+          setCurrentUser(null);
+          throw profileError;
+        }
+        const profile = profileDoc.data();
+        if (profile.isActive === false) {
+          await signOut(auth).catch(() => undefined);
+          setCurrentUser(null);
+          throw new Error("Your account is inactive. Contact support for assistance.");
+        }
+        user = {
+          uid: firebaseUser.uid,
+          email: profile.email || firebaseUser.email || normalizedEmail,
+          name: profile.name || firebaseUser.displayName || "User",
+          role: profile.role || "BUYER_RENTER",
+          phone: profile.phone || "",
+          agencyName: profile.agencyName || "",
+          preferredCity: profile.preferredCity || "",
+          photoURL: profile.photoURL || firebaseUser.photoURL || undefined,
+        };
+      }
       setCurrentUser(user);
       const role = (user.role || "BUYER_RENTER").toUpperCase();
       router.replace(role === "ADMIN" ? "/admin" : role === "SELLER" || role === "SELLER_PROPERTY_OWNER" ? "/seller" : "/dashboard");
@@ -132,6 +156,9 @@ export default function LoginPage() {
               <label className="block text-xs font-semibold uppercase text-gray-700">
                 Password
               </label>
+              <Link href="/forgot-password" className="text-xs font-semibold text-indigo-600 hover:underline">
+                Forgot password?
+              </Link>
             </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

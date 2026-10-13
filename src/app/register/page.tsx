@@ -15,9 +15,13 @@ import {
   Loader2,
   CheckCircle2,
   Home,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { createUserWithEmailAndPassword, deleteUser, updateProfile } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
 import { usePropertyStore } from "@/store/propertyStore";
 
@@ -31,6 +35,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [agencyName, setAgencyName] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -69,16 +74,33 @@ export default function RegisterPage() {
       );
       const user = userCredential.user;
 
+      // Create the owner-scoped profile immediately so the auth-state listener can load it.
+      const userProfile = {
+        uid: user.uid,
+        name: cleanName,
+        email: normalizedEmail,
+        phone: cleanPhone || "",
+        agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : "",
+        role: accountType,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        await setDoc(doc(db, "users", user.uid), userProfile, { merge: true });
+      } catch (firestoreError) {
+        await deleteUser(user).catch(() => undefined);
+        throw firestoreError;
+      }
+
       // 2. Set Firebase Auth display name
       try {
-        await updateProfile(user, {
-          displayName: cleanName,
-        });
+        await updateProfile(user, { displayName: cleanName });
       } catch (profileErr) {
         console.warn("Failed to update Auth display name:", profileErr);
       }
 
-      // 3. Register user profile via backend Admin SDK (bypasses Firestore client security rules)
+      // 4. Sync the profile through the API as well. Firebase/Firestore remain sufficient to finish signup if the API is down.
       try {
         const profile = await authApi.registerProfile({
           name: cleanName,
@@ -87,12 +109,11 @@ export default function RegisterPage() {
           agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
           role: accountType,
         });
-        if (!profile.user) throw new Error("Your account was created, but its profile could not be loaded.");
-        setCurrentUser(profile.user);
+        if (profile.user) setCurrentUser(profile.user);
+        else setCurrentUser(userProfile);
       } catch (profileError) {
-        // Roll back the newly created Firebase account if its backend profile could not be saved.
-        try { await deleteUser(user); } catch { /* Firebase may require a fresh login to delete. */ }
-        throw profileError;
+        console.warn("Profile API unavailable; signup profile was saved to Firestore.", profileError);
+        setCurrentUser(userProfile);
       }
 
       // 5. Navigate to appropriate dashboard based on selected role
@@ -276,13 +297,22 @@ export default function RegisterPage() {
             <div className="relative">
               <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimum 6 characters"
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-gray-900 transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

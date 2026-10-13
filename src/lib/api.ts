@@ -11,7 +11,7 @@ import { Property, Inquiry, User, FilterState } from "@/store/propertyStore";
 export const API_BASE_URL = (() => {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (configuredUrl) {
-    const normalizedUrl = configuredUrl.replace(/\/$/, "");
+    const normalizedUrl = configuredUrl.replace(/\/+$/, "").replace(/\/api$/i, "");
     const pointsToLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(normalizedUrl);
     // A browser visiting the deployed site cannot reach the developer's localhost.
     if (process.env.NODE_ENV === "production" && pointsToLocalhost) return "";

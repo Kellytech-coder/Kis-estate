@@ -154,9 +154,14 @@ export default function AdminLoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-              Admin Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Admin Password
+              </label>
+              <Link href="/forgot-password" className="text-xs font-semibold text-indigo-300 hover:text-white hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
