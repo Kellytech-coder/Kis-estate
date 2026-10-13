@@ -11,6 +11,18 @@ The Express API reads and writes property, profile, inquiry, and contact data in
 
 The health endpoint is `GET /api/health`. It reports that the API is running; it does not currently perform a Firestore connectivity check.
 
+## Deploy the API and rules
+
+This repository includes a Render Blueprint at the repository root for the Express API. In Render, create a Blueprint from this repository and provide the Firebase service account's client email and private key when prompted. Render will deploy the service from `backend/` and provide a public URL. Confirm that `GET https://<your-api-host>/api/health` returns JSON before connecting the frontend.
+
+Publish the Firestore rules from the repository root using the Firebase CLI:
+
+```powershell
+firebase deploy --only firestore:rules --project property-listing-5df59
+```
+
+Then add `NEXT_PUBLIC_API_URL=https://<your-api-host>` to the Vercel project's Production Environment Variables and redeploy. Use the API host only; the frontend adds `/api/...` to requests automatically. The frontend also has a Firestore profile fallback, and the published rules must permit a signed-in user to read/write their own `users/{uid}` profile.
+
 ## Authentication and authorization
 
 - The frontend uses Firebase Authentication for account creation and password verification.
