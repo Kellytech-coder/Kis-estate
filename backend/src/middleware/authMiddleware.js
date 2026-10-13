@@ -1,5 +1,10 @@
 const { auth, db } = require("../config/firebase");
 
+const isGoogleServiceUnavailable = (error) =>
+  /\bUNAVAILABLE\b|No connection established|\bEACCES\b|\bENETUNREACH\b|\bECONNRESET\b|\bETIMEDOUT\b/i.test(
+    error?.message || ""
+  );
+
 const authenticate = async (req, res, next) => {
   try {
     const authorization = req.headers.authorization;
@@ -70,6 +75,13 @@ const authenticate = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Authentication error:", error);
+
+    if (isGoogleServiceUnavailable(error)) {
+      return res.status(503).json({
+        success: false,
+        message: "Firebase Authentication is temporarily unreachable. Please try again shortly.",
+      });
+    }
 
     return res.status(401).json({
       success: false,

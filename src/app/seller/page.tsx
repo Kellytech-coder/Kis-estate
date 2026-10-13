@@ -636,6 +636,7 @@ export default function SellerPortalPage() {
                         src={prop.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"}
                         alt={prop.title}
                         fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
                         className="object-cover"
                       />
                       <div className="absolute top-3 left-3 flex gap-2">
@@ -1195,7 +1196,7 @@ export default function SellerPortalPage() {
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
                     {imageList.map((img, idx) => (
                       <div key={idx} className="relative h-20 rounded-xl overflow-hidden group bg-gray-100 border border-gray-200">
-                        <Image src={img} alt={`preview ${idx}`} fill className="object-cover" />
+                        <Image src={img} alt={`preview ${idx}`} fill sizes="(max-width: 640px) 33vw, 25vw" className="object-cover" />
                         {idx === 0 && (
                           <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-indigo-600 text-white text-[9px] font-bold rounded shadow-sm">
                             Cover

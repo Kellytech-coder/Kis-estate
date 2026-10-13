@@ -1,3 +1,8 @@
+// Prefer IPv4 for Google APIs. Some hosts resolve Google endpoints to IPv6
+// addresses that their network does not allow, which makes Firestore and
+// Firebase token verification fail with gRPC UNAVAILABLE / EACCES errors.
+require("node:dns").setDefaultResultOrder("ipv4first");
+
 const admin = require("firebase-admin");
 const path = require("path");
 const fs = require("fs");

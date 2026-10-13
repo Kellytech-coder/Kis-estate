@@ -18,10 +18,8 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { createUserWithEmailAndPassword, deleteUser, updateProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { db } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
 import { usePropertyStore } from "@/store/propertyStore";
 
@@ -74,8 +72,9 @@ export default function RegisterPage() {
       );
       const user = userCredential.user;
 
-      // Create the owner-scoped profile immediately so the auth-state listener can load it.
-      const userProfile = {
+      // Send profile data through the authenticated API; the browser does not write
+      // user documents directly because the deployed Firestore rules may differ.
+      const requestedProfile = {
         uid: user.uid,
         name: cleanName,
         email: normalizedEmail,
@@ -86,12 +85,6 @@ export default function RegisterPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      try {
-        await setDoc(doc(db, "users", user.uid), userProfile, { merge: true });
-      } catch (firestoreError) {
-        await deleteUser(user).catch(() => undefined);
-        throw firestoreError;
-      }
 
       // 2. Set Firebase Auth display name
       try {
@@ -100,7 +93,9 @@ export default function RegisterPage() {
         console.warn("Failed to update Auth display name:", profileErr);
       }
 
-      // 4. Sync the profile through the API as well. Firebase/Firestore remain sufficient to finish signup if the API is down.
+      // If the profile API is unavailable, keep the Auth account and grant only
+      // the default buyer role until the backend can persist and verify the role.
+      let resolvedProfile = { ...requestedProfile, role: "BUYER_RENTER" as const, agencyName: "" };
       try {
         const profile = await authApi.registerProfile({
           name: cleanName,
@@ -109,21 +104,35 @@ export default function RegisterPage() {
           agencyName: accountType === "SELLER_PROPERTY_OWNER" ? (cleanAgency || "Independent Owner") : undefined,
           role: accountType,
         });
-        if (profile.user) setCurrentUser(profile.user);
-        else setCurrentUser(userProfile);
-      } catch (profileError) {
-        console.warn("Profile API unavailable; signup profile was saved to Firestore.", profileError);
-        setCurrentUser(userProfile);
+        if (profile.user) resolvedProfile = profile.user;
+      } catch {
+        console.warn("Profile API unavailable; continuing with buyer-level access until profile services are restored.");
       }
+      setCurrentUser(resolvedProfile);
 
       // 5. Navigate to appropriate dashboard based on selected role
-      if (accountType === "SELLER_PROPERTY_OWNER") {
+      if (resolvedProfile.role === "SELLER_PROPERTY_OWNER") {
         router.replace("/seller");
       } else {
         router.replace("/dashboard");
       }
     } catch (err: unknown) {
       const fbErr = err as { code?: string; message?: string };
+
+      // If Firestore rejects work triggered during signup/navigation, preserve the
+      // Auth account and recover into the least-privileged dashboard session.
+      if (fbErr.code === "permission-denied" && auth.currentUser) {
+        console.warn("Firestore denied a signup-related operation; continuing with buyer-only access.");
+        setCurrentUser({
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email || normalizedEmail,
+          name: cleanName || auth.currentUser.displayName || "User",
+          role: "BUYER_RENTER",
+        });
+        window.location.replace("/dashboard");
+        return;
+      }
+
       console.error("Registration error:", err);
 
       switch (fbErr.code) {

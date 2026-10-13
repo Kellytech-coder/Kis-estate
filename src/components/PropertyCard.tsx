@@ -149,6 +149,7 @@ export default function PropertyCard({ property, className = "" }: PropertyCardP
                 src={property.agent.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"}
                 alt={property.agent.name}
                 fill
+                sizes="24px"
                 className="object-cover"
               />
             </div>

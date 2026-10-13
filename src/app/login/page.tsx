@@ -13,10 +13,10 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
+import { getOwnProfileOrRestrictedUser } from "@/lib/profileFallback";
 import { usePropertyStore } from "@/store/propertyStore";
 import type { User } from "@/store/propertyStore";
 
@@ -48,30 +48,9 @@ export default function LoginPage() {
       let user: User;
       try {
         ({ user } = await authApi.getMe());
-      } catch (profileError) {
-        let profileDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (!profileDoc.exists()) profileDoc = await getDoc(doc(db, "user", firebaseUser.uid));
-        if (!profileDoc.exists()) {
-          await signOut(auth).catch(() => undefined);
-          setCurrentUser(null);
-          throw profileError;
-        }
-        const profile = profileDoc.data();
-        if (profile.isActive === false) {
-          await signOut(auth).catch(() => undefined);
-          setCurrentUser(null);
-          throw new Error("Your account is inactive. Contact support for assistance.");
-        }
-        user = {
-          uid: firebaseUser.uid,
-          email: profile.email || firebaseUser.email || normalizedEmail,
-          name: profile.name || firebaseUser.displayName || "User",
-          role: profile.role || "BUYER_RENTER",
-          phone: profile.phone || "",
-          agencyName: profile.agencyName || "",
-          preferredCity: profile.preferredCity || "",
-          photoURL: profile.photoURL || firebaseUser.photoURL || undefined,
-        };
+      } catch (apiError) {
+        console.warn("Profile API is unavailable; checking the signed-in user's Firestore profile.");
+        user = await getOwnProfileOrRestrictedUser(firebaseUser);
       }
       setCurrentUser(user);
       const role = (user.role || "BUYER_RENTER").toUpperCase();
@@ -96,7 +75,11 @@ export default function LoginPage() {
           setErrorMsg("Network connection issue. Please check your internet.");
           break;
         default:
-          setErrorMsg(fbErr.message || "Failed to sign in. Please verify your credentials.");
+          setErrorMsg(
+            (err as { status?: number })?.status === 503
+              ? "The property service is temporarily unavailable. Your sign-in is safe; please try again shortly."
+              : fbErr.message || "Failed to sign in. Please verify your credentials."
+          );
       }
     } finally {
       setLoading(false);

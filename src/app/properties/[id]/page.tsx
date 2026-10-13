@@ -286,6 +286,7 @@ export default function PropertyDetailPage({
             src={images[selectedImageIndex] || images[0]}
             alt={property.title}
             fill
+            sizes="(max-width: 1024px) 100vw, 66vw"
             priority
             className="object-cover object-center transition-all duration-300"
           />
@@ -307,6 +308,7 @@ export default function PropertyDetailPage({
                   src={img}
                   alt={`Thumbnail ${idx + 1}`}
                   fill
+                  sizes="(max-width: 640px) 25vw, (max-width: 1024px) 25vw, 16vw"
                   className="object-cover"
                 />
               </button>
@@ -413,6 +415,7 @@ export default function PropertyDetailPage({
                       src={property.agent.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"}
                       alt={property.agent.name}
                       fill
+                      sizes="56px"
                       className="object-cover"
                     />
                   </div>

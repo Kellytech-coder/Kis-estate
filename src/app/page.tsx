@@ -72,6 +72,7 @@ export default function HomePage() {
             src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2000&q=85"
             alt="Nigerian Luxury Real Estate"
             fill
+            sizes="100vw"
             priority
             className="object-cover object-center brightness-[0.38]"
           />
@@ -244,6 +245,7 @@ export default function HomePage() {
                   src={market.image}
                   alt={market.city}
                   fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                   className="object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/30 to-transparent" />

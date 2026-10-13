@@ -3,9 +3,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { propertiesApi, inquiriesApi, authApi } from "@/lib/api";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { getOwnProfileOrRestrictedUser } from "@/lib/profileFallback";
 
 export interface PropertyLocation {
   address: string;
@@ -106,18 +106,6 @@ export interface User {
   preferredCity?: string;
   avatar?: string;
   photoURL?: string;
-}
-
-interface AuthProfileData {
-  email?: string;
-  name?: string;
-  role?: User["role"];
-  phone?: string;
-  agencyName?: string;
-  preferredCity?: string;
-  photoURL?: string;
-  savedProperties?: string[];
-  isActive?: boolean;
 }
 
 export interface PropertyStore {
@@ -365,32 +353,8 @@ export const usePropertyStore = create<PropertyStore>()(
             try {
               ({ user } = await authApi.getMe());
             } catch (apiError) {
-              // Firestore rules allow users to read only their own profile, keeping sign-in usable during API outages.
-              let profile: AuthProfileData | null = null;
-              for (let attempt = 0; attempt < 5 && !profile; attempt += 1) {
-                let profileDoc = await getDoc(doc(db, "users", fbUser.uid));
-                if (!profileDoc.exists()) profileDoc = await getDoc(doc(db, "user", fbUser.uid));
-                if (profileDoc.exists()) {
-                  profile = profileDoc.data() as AuthProfileData;
-                } else if (attempt < 4) {
-                  await new Promise((resolve) => setTimeout(resolve, 250));
-                }
-              }
-              if (!profile) throw apiError;
-              if (profile.isActive === false) throw new Error("Your account is inactive");
-              user = {
-                uid: fbUser.uid,
-                email: profile.email || fbUser.email || "",
-                name: profile.name || fbUser.displayName || "User",
-                role: profile.role || "BUYER_RENTER",
-                phone: profile.phone || "",
-                agencyName: profile.agencyName || "",
-                preferredCity: profile.preferredCity || "",
-                photoURL: profile.photoURL || fbUser.photoURL || undefined,
-              };
-              if (Array.isArray(profile.savedProperties)) {
-                set({ favorites: profile.savedProperties });
-              }
+              console.warn("Profile API is unavailable; checking the signed-in user's Firestore profile.");
+              user = await getOwnProfileOrRestrictedUser(fbUser);
             }
             const role = (user.role || "BUYER_RENTER").toUpperCase();
             set({
@@ -413,7 +377,12 @@ export const usePropertyStore = create<PropertyStore>()(
               currentUser: null,
               isLoadingUser: false,
             });
-            await signOut(auth).catch(() => undefined);
+            const apiError = err as { status?: number };
+            // Keep the valid Firebase session on temporary API/Google outages.
+            // Sign out only when the backend explicitly rejects the token/access.
+            if (apiError.status === 401 || apiError.status === 403) {
+              await signOut(auth).catch(() => undefined);
+            }
           }
         });
 

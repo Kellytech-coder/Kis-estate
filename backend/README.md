@@ -21,7 +21,7 @@ Publish the Firestore rules from the repository root using the Firebase CLI:
 firebase deploy --only firestore:rules --project property-listing-5df59
 ```
 
-Then add `NEXT_PUBLIC_API_URL=https://<your-api-host>` to the Vercel project's Production Environment Variables and redeploy. Use the API host only; the frontend adds `/api/...` to requests automatically. The frontend also has a Firestore profile fallback, and the published rules must permit a signed-in user to read/write their own `users/{uid}` profile.
+Then add `NEXT_PUBLIC_API_URL=https://<your-api-host>` to the Vercel project's Production Environment Variables and redeploy. Use the API host only; the frontend adds `/api/...` to requests automatically. The backend host must allow outbound HTTPS and Firestore traffic to Google APIs. Firebase Admin credentials and the frontend Firebase project ID must refer to the same Firebase project. The login page can read the signed-in user's own profile directly from Firestore if the API is temporarily down, so publish the included Firestore rules before relying on that fallback.
 
 ## Authentication and authorization
 

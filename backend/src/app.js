@@ -94,6 +94,13 @@ app.use((err, req, res, next) => {
 
   console.error("API Error:", err);
 
+  if (/\bUNAVAILABLE\b|No connection established|\bEACCES\b|\bENETUNREACH\b|\bECONNRESET\b|\bETIMEDOUT\b/i.test(err.message || "")) {
+    return res.status(503).json({
+      success: false,
+      message: "Firebase services are temporarily unreachable. Please retry shortly.",
+    });
+  }
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Internal server error",
