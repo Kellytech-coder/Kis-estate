@@ -1,5 +1,4 @@
 import { auth } from "./firebase";
-import { fetchPublicPropertiesFromFirestore } from "./publicPropertiesFallback";
 import { Property, Inquiry, User, FilterState } from "@/store/propertyStore";
 
 /**
@@ -151,14 +150,9 @@ export const propertiesApi = {
       if (params.maxPrice !== null && params.maxPrice !== undefined) searchParams.append("maxPrice", String(params.maxPrice));
     }
     const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
-    try {
-      return await apiRequest<{ success: boolean; data: Property[]; count: number }>(`/api/properties${query}`);
-    } catch (error) {
-      const status = (error as { status?: number })?.status;
-      if (status !== 0 && status !== 503 && !(status && status >= 500)) throw error;
-      console.warn("Property API unavailable; loading public listings directly from Firestore.");
-      return fetchPublicPropertiesFromFirestore(params);
-    }
+    return apiRequest<{ success: boolean; data: Property[]; count: number }>(`/api/properties${query}`, {
+      cache: "no-store",
+    });
   },
 
   async getById(id: string): Promise<{ success: boolean; data: Property }> {

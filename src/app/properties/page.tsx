@@ -28,12 +28,10 @@ export default function PropertiesPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // Re-fetch on mount if empty
+  // Always refresh from the backend whenever Explore is opened.
   useEffect(() => {
-    if (properties.length === 0) {
-      void fetchProperties();
-    }
-  }, [fetchProperties, properties.length]);
+    void fetchProperties();
+  }, [fetchProperties]);
 
   // Apply client-side filters and sorting
   const filteredProperties = useMemo(() => {
@@ -190,6 +188,12 @@ export default function PropertiesPage() {
               </strong>{" "}
               properties
             </span>
+            {isLoadingProperties && properties.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-indigo-600" role="status">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Refreshing from database...
+              </span>
+            )}
             {(filters.search ||
               filters.type !== "all" ||
               filters.propertyType !== "all" ||
