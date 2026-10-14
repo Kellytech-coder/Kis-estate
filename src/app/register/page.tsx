@@ -21,7 +21,7 @@ import {
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { authApi } from "@/lib/api";
-import { usePropertyStore } from "@/store/propertyStore";
+import { type User, usePropertyStore } from "@/store/propertyStore";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -95,7 +95,7 @@ export default function RegisterPage() {
 
       // If the profile API is unavailable, keep the Auth account and grant only
       // the default buyer role until the backend can persist and verify the role.
-      let resolvedProfile = { ...requestedProfile, role: "BUYER_RENTER" as const, agencyName: "" };
+      let resolvedProfile: User = { ...requestedProfile, role: "BUYER_RENTER", agencyName: "" };
       try {
         const profile = await authApi.registerProfile({
           name: cleanName,
