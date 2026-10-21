@@ -8,6 +8,8 @@ const amenityRoutes = require("./routes/amenityRoute");
 const inquiryRoutes = require("./routes/inquiryRoute");
 const contactRoutes = require("./routes/contactRoute");
 const adminRoutes = require("./routes/adminRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const { handlePaystackWebhook } = require("./controller/paymentController");
 
 const app = express();
 
@@ -55,7 +57,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "10mb", verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // GET /api/health
@@ -76,6 +78,8 @@ app.use("/api/amenities", amenityRoutes);
 app.use("/api/inquiries", inquiryRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/admin", adminRoutes);
+app.post("/api/payments/webhook", handlePaystackWebhook);
+app.use("/api/payments", paymentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

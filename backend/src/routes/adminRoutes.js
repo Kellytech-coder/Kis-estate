@@ -10,6 +10,8 @@ const {
 
 const { authenticate } = require("../middleware/authMiddleware");
 const { requireAdmin } = require("../middleware/adminMiddleware");
+const { getPaymentReport } = require("../controller/adminPaymentController");
+const { getPromotionPlanForAdmin, updatePromotionPlan } = require("../controller/paymentController");
 
 // All admin routes require authentication and admin role
 router.use(authenticate);
@@ -17,6 +19,9 @@ router.use(requireAdmin);
 
 // Admin dashboard statistics
 router.get("/stats", getStats);
+router.get("/payments", getPaymentReport);
+router.get("/promotion-plan", getPromotionPlanForAdmin);
+router.put("/promotion-plan", updatePromotionPlan);
 
 // Admin user management
 router.get("/users", getAllUsers);

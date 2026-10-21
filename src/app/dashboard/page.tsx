@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Heart,
   Calendar,
@@ -14,7 +15,6 @@ import {
   User as UserIcon,
   Phone,
   MapPin,
-  Briefcase,
   CheckCircle2,
   AlertCircle,
   Sparkles,
@@ -25,6 +25,7 @@ import { useIsMounted } from "@/lib/utils";
 import { authApi } from "@/lib/api";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const {
     properties,
     favorites,
@@ -61,6 +62,12 @@ export default function DashboardPage() {
   const isSeller =
     currentUser?.role?.toUpperCase() === "SELLER_PROPERTY_OWNER" ||
     currentUser?.role?.toUpperCase() === "SELLER";
+  const isAdmin = currentUser?.role?.toUpperCase() === "ADMIN";
+
+  useEffect(() => {
+    if (isSeller) router.replace("/seller");
+    else if (isAdmin) router.replace("/admin");
+  }, [isSeller, isAdmin, router]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +131,10 @@ export default function DashboardPage() {
     );
   }
 
+  if (isSeller || isAdmin) {
+    return <div className="min-h-[70vh] flex items-center justify-center text-sm text-gray-500">Opening your account workspace…</div>;
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       {/* User Header Profile Card */}
@@ -138,7 +149,7 @@ export default function DashboardPage() {
                 {currentUser?.name || "Client Member"}
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 capitalize">
-                {isSeller ? "Property Owner / Seller" : "Buyer / Renter"}
+                Buyer / Renter
               </span>
             </div>
             <p className="text-sm text-gray-500">{currentUser?.email}</p>
@@ -159,15 +170,6 @@ export default function DashboardPage() {
             </div>
             <div className="text-xs text-gray-500 font-medium">Tours &amp; Inquiries</div>
           </div>
-          {isSeller && (
-            <Link
-              href="/seller"
-              className="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-200 transition-all flex items-center gap-1.5"
-            >
-              <Briefcase className="w-4 h-4" />
-              <span>Seller Studio</span>
-            </Link>
-          )}
           <button
             onClick={() => void logout()}
             title="Sign Out"

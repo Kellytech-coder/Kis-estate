@@ -3,6 +3,7 @@ const express = require("express");
 const {
   getProperties,
   getProperty,
+  recordPropertyView,
   getMyProperties,
   createProperty,
   updateProperty,
@@ -22,6 +23,7 @@ router.get("/seller/my-properties", authenticate, requireSellerOrAdmin, getMyPro
 
 // GET /api/properties/:id (Public)
 router.get("/:id", getProperty);
+router.post("/:id/view", recordPropertyView);
 
 // POST /api/properties (Seller or Admin)
 router.post("/", authenticate, requireSellerOrAdmin, createProperty);

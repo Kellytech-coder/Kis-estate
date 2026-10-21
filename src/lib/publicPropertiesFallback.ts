@@ -12,6 +12,12 @@ function asIsoDate(value: unknown): string {
   return new Date(0).toISOString();
 }
 
+function asDate(value: unknown): Date | null {
+  if (value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function") return value.toDate();
+  if (typeof value === "string" || typeof value === "number") return new Date(value);
+  return null;
+}
+
 function formatProperty(id: string, raw: Record<string, unknown>): Property {
   const rawLocation = (raw.location && typeof raw.location === "object" ? raw.location : {}) as Record<string, unknown>;
   const rawAgent = (raw.agent && typeof raw.agent === "object" ? raw.agent : {}) as Record<string, unknown>;
@@ -36,9 +42,11 @@ function formatProperty(id: string, raw: Record<string, unknown>): Property {
     bathrooms: Number(raw.bathrooms) || 0,
     parking: Number(raw.parking) || 0,
     areaSqFt: Number(raw.areaSqFt) || 0,
+    areaUnit: raw.areaUnit === "sqm" || raw.propertyType === "land" ? "sqm" : "sqft",
     yearBuilt: Number(raw.yearBuilt) || new Date().getFullYear(),
     images: Array.isArray(raw.images) ? raw.images.filter((image): image is string => typeof image === "string") : [],
-    featured: Boolean(raw.featured),
+    featured: Boolean(raw.featured) && Boolean(asDate(raw.featuredUntil)) && (asDate(raw.featuredUntil)?.getTime() || 0) > Date.now(),
+    featuredUntil: asDate(raw.featuredUntil)?.toISOString() || null,
     amenities: Array.isArray(raw.amenities) ? raw.amenities.filter((amenity): amenity is string => typeof amenity === "string") : [],
     status: status === "active" ? "available" : status as Property["status"],
     agent: {

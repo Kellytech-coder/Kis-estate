@@ -41,18 +41,22 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const navLinks: NavLinkItem[] = [
-    { name: "Explore", href: "/properties" },
-    { name: "Buy", href: "/buy" },
-    { name: "Rent", href: "/rent" },
-    ...(isSeller || isAdmin
-      ? [{ name: "Seller Studio", href: "/seller", badge: "Seller" }]
-      : []),
-    { name: "Dashboard", href: "/dashboard" },
-    ...(isAdmin
-      ? [{ name: "Admin Console", href: "/admin", badge: "Admin" }]
-      : []),
-  ];
+  const navLinks: NavLinkItem[] = isAdmin
+    ? [
+        { name: "Admin Console", href: "/admin", badge: "Admin" },
+        { name: "Marketplace", href: "/properties" },
+      ]
+    : isSeller
+      ? [
+          { name: "Seller Studio", href: "/seller", badge: "Seller" },
+          { name: "Browse Marketplace", href: "/properties" },
+        ]
+      : [
+          { name: "Explore", href: "/properties" },
+          { name: "Buy", href: "/buy" },
+          { name: "Rent", href: "/rent" },
+          { name: "My Buyer Dashboard", href: "/dashboard" },
+        ];
 
   const favCount = mounted ? favorites.length : 0;
 
@@ -131,24 +135,20 @@ export default function Navbar() {
             )}
 
             {/* Favorites Counter */}
-            <Link
+            {!isSeller && !isAdmin && <Link
               href="/dashboard"
               className="p-2.5 rounded-xl text-gray-600 hover:text-rose-600 hover:bg-rose-50/60 transition-all relative"
               title="Saved Properties"
             >
               <Heart className="w-5 h-5" />
-              {favCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-in zoom-in">
-                  {favCount}
-                </span>
-              )}
-            </Link>
+              {favCount > 0 && <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-in zoom-in">{favCount}</span>}
+            </Link>}
 
             {/* User Profile or Sign In */}
             {mounted && currentUser ? (
               <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
                 <Link
-                  href={isSeller ? "/seller" : "/dashboard"}
+                  href={isAdmin ? "/admin" : isSeller ? "/seller" : "/dashboard"}
                   className="flex items-center gap-2 py-1.5 px-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">
@@ -186,7 +186,7 @@ export default function Navbar() {
 
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-2 md:hidden">
-            <Link
+            {!isSeller && !isAdmin && <Link
               href="/dashboard"
               className="p-2 text-gray-600 hover:text-rose-600 relative"
             >
@@ -196,7 +196,7 @@ export default function Navbar() {
                   {favCount}
                 </span>
               )}
-            </Link>
+            </Link>}
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

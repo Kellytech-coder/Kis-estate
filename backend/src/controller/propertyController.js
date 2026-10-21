@@ -1,4 +1,5 @@
 const { db, admin } = require("../config/firebase");
+const { isFeaturedActive } = require("./paymentController");
 
 const propertiesCollection = db.collection("properties");
 
@@ -36,9 +37,14 @@ const formatPropertyDoc = (doc) => {
     bathrooms: Number(data.bathrooms) || 0,
     parking: Number(data.parking) || 0,
     areaSqFt: Number(data.areaSqFt) || 0,
+    areaUnit: data.areaUnit || (data.propertyType === "land" ? "sqm" : "sqft"),
     yearBuilt: Number(data.yearBuilt) || new Date().getFullYear(),
     images: Array.isArray(data.images) && data.images.length > 0 ? data.images : [],
-    featured: Boolean(data.featured),
+    featured: isFeaturedActive(data),
+    featuredFrom: data.featuredFrom?.toDate?.()?.toISOString?.() || null,
+    featuredUntil: data.featuredUntil?.toDate?.()?.toISOString?.() || null,
+    viewCount: Number(data.viewCount) || 0,
+    featuredViewCount: Number(data.featuredViewCount) || 0,
     amenities: Array.isArray(data.amenities) ? data.amenities : [],
     status: (data.status || "available").toLowerCase(),
     agent: data.agent || {
@@ -178,15 +184,54 @@ const getProperty = async (req, res, next) => {
   }
 };
 
+// Count one public detail-page view. Promoted views are grouped by promotion
+// order and UTC day so reporting can compare paid reach with inquiries.
+const recordPropertyView = async (req, res, next) => {
+  try {
+    const propertyRef = propertiesCollection.doc(req.params.id);
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(propertyRef);
+      if (!snapshot.exists) {
+        const error = new Error("Property not found");
+        error.status = 404;
+        throw error;
+      }
+      const property = snapshot.data();
+      const featured = isFeaturedActive(property) && property.featuredOrderId;
+      transaction.update(propertyRef, {
+        viewCount: admin.firestore.FieldValue.increment(1),
+        ...(featured ? { featuredViewCount: admin.firestore.FieldValue.increment(1) } : {}),
+      });
+      if (featured) {
+        const viewDate = new Date().toISOString().slice(0, 10);
+        const viewRef = db.collection("promotion_views").doc(`${property.featuredOrderId}_${viewDate}`);
+        transaction.set(viewRef, {
+          orderId: property.featuredOrderId,
+          propertyId: req.params.id,
+          viewDate,
+          views: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    });
+    return res.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ========================================
 // GET SELLER'S OWN PROPERTIES
 // ========================================
 const getMyProperties = async (req, res, next) => {
   try {
     const userId = req.user.uid;
-    const snapshot = await propertiesCollection.where("createdById", "==", userId).get();
-
-    const properties = snapshot.docs.map(formatPropertyDoc);
+    const [createdBySnapshot, sellerSnapshot] = await Promise.all([
+      propertiesCollection.where("createdById", "==", userId).get(),
+      propertiesCollection.where("sellerId", "==", userId).get(),
+    ]);
+    const propertyDocs = new Map([...createdBySnapshot.docs, ...sellerSnapshot.docs].map((doc) => [doc.id, doc]));
+    const properties = [...propertyDocs.values()].map(formatPropertyDoc);
     properties.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json({
@@ -222,8 +267,8 @@ const createProperty = async (req, res, next) => {
       bathrooms = 0,
       parking = 0,
       areaSqFt = 0,
+      areaUnit,
       yearBuilt = new Date().getFullYear(),
-      featured = false,
       status = "available",
       images = [],
       amenities = [],
@@ -235,6 +280,10 @@ const createProperty = async (req, res, next) => {
         success: false,
         message: "Title and price are required",
       });
+    }
+
+    if (!Array.isArray(images) || images.length === 0 || images.some((image) => typeof image !== "string" || !image.trim())) {
+      return res.status(400).json({ success: false, message: "At least one valid property photo is required" });
     }
 
     const resolvedType = type || listingType || "buy";
@@ -275,12 +324,11 @@ const createProperty = async (req, res, next) => {
       bathrooms: Number(bathrooms) || 0,
       parking: Number(parking) || 0,
       areaSqFt: Number(areaSqFt) || 0,
+      areaUnit: areaUnit === "sqm" || resolvedPropertyType === "land" ? "sqm" : "sqft",
       yearBuilt: Number(yearBuilt) || new Date().getFullYear(),
-      featured: Boolean(featured),
+      featured: false,
       status: status.toLowerCase(),
-      images: Array.isArray(images) && images.length > 0 ? images : [
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"
-      ],
+      images,
       amenities: Array.isArray(amenities) ? amenities : [],
       agent: resolvedAgent,
       createdById: req.user.uid,
@@ -320,7 +368,7 @@ const updateProperty = async (req, res, next) => {
 
     const currentData = snapshot.data();
     const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
-    const isOwner = currentData.createdById === req.user.uid;
+    const isOwner = currentData.createdById === req.user.uid || currentData.sellerId === req.user.uid;
 
     // Strict Ownership Enforcement: Non-admins can only modify their own listings
     if (!isAdmin && !isOwner) {
@@ -331,6 +379,11 @@ const updateProperty = async (req, res, next) => {
     }
 
     const updates = { ...req.body };
+    // Promotion state is only changed by the verified payment controller.
+    delete updates.featured;
+    delete updates.featuredFrom;
+    delete updates.featuredUntil;
+    delete updates.featuredOrderId;
 
     // Format numbers if provided
     if (updates.price !== undefined) updates.price = Number(updates.price);
@@ -338,8 +391,8 @@ const updateProperty = async (req, res, next) => {
     if (updates.bathrooms !== undefined) updates.bathrooms = Number(updates.bathrooms);
     if (updates.parking !== undefined) updates.parking = Number(updates.parking);
     if (updates.areaSqFt !== undefined) updates.areaSqFt = Number(updates.areaSqFt);
+    if (updates.areaUnit !== undefined) updates.areaUnit = updates.areaUnit === "sqm" ? "sqm" : "sqft";
     if (updates.yearBuilt !== undefined) updates.yearBuilt = Number(updates.yearBuilt);
-    if (updates.featured !== undefined) updates.featured = Boolean(updates.featured);
 
     updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
@@ -374,7 +427,7 @@ const deleteProperty = async (req, res, next) => {
 
     const currentData = snapshot.data();
     const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
-    const isOwner = currentData.createdById === req.user.uid;
+    const isOwner = currentData.createdById === req.user.uid || currentData.sellerId === req.user.uid;
 
     // Strict Ownership Enforcement: Non-admins can only delete their own listings
     if (!isAdmin && !isOwner) {
@@ -398,6 +451,7 @@ const deleteProperty = async (req, res, next) => {
 module.exports = {
   getProperties,
   getProperty,
+  recordPropertyView,
   getMyProperties,
   createProperty,
   updateProperty,

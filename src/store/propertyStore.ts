@@ -55,8 +55,12 @@ export interface Property {
   bathrooms: number;
   parking?: number;
   areaSqFt: number;
+  areaUnit?: "sqft" | "sqm";
   images: string[];
   featured: boolean;
+  featuredUntil?: string | null;
+  viewCount?: number;
+  featuredViewCount?: number;
   amenities: string[];
   yearBuilt: number;
   status: "available" | "pending" | "sold" | "rented";
@@ -350,11 +354,21 @@ export const usePropertyStore = create<PropertyStore>()(
 
           try {
             let user: User;
+            let profileExists = true;
             try {
-              ({ user } = await authApi.getMe());
+              const profileResponse = await authApi.getMe();
+              user = profileResponse.user;
+              profileExists = profileResponse.profileExists !== false;
             } catch (apiError) {
               console.warn("Profile API is unavailable; checking the signed-in user's Firestore profile.");
               user = await getOwnProfileOrRestrictedUser(fbUser);
+            }
+            // A registration request may have saved a seller profile while this
+            // earlier /me request was in flight. Never overwrite that selection
+            // with the temporary buyer fallback for a profile that did not exist.
+            if (!profileExists && get().currentUser?.uid === fbUser.uid) {
+              set({ isLoadingUser: false });
+              return;
             }
             const role = (user.role || "BUYER_RENTER").toUpperCase();
             set({

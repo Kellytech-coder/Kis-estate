@@ -46,6 +46,7 @@ export default function PropertyDetailPage({
     isFavorite,
     addInquiry,
     currentUser,
+    isLoadingUser,
   } = usePropertyStore();
 
   const mounted = useIsMounted();
@@ -99,6 +100,18 @@ export default function PropertyDetailPage({
       void loadProperty();
     }
   }, [id, property]);
+
+  useEffect(() => {
+    if (!mounted || isLoadingUser || !property || (currentUser?.uid && currentUser.uid === property.createdById)) return;
+    const sessionKey = `property-detail-viewed:${id}`;
+    try {
+      if (window.sessionStorage.getItem(sessionKey)) return;
+      window.sessionStorage.setItem(sessionKey, "1");
+    } catch {
+      // Count the view even when browser storage is unavailable.
+    }
+    void propertiesApi.recordView(id).catch(() => undefined);
+  }, [id, property, currentUser?.uid, isLoadingUser, mounted]);
 
   const favorited = mounted && property ? isFavorite(property.id) : false;
 
@@ -354,7 +367,7 @@ export default function PropertyDetailPage({
               <div>
                 <span className="text-xs text-gray-500 block">Living Area</span>
                 <span className="text-base font-bold text-gray-900">
-                  {formatNumber(property.areaSqFt)} sqft
+                  {formatNumber(property.areaSqFt)} {property.areaUnit || "sqft"}
                 </span>
               </div>
             </div>

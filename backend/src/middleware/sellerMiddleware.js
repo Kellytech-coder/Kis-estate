@@ -39,7 +39,7 @@ const requireSellerOrAdmin = async (req, res, next) => {
     if (!isAuthorized) {
       return res.status(403).json({
         success: false,
-        message: "Seller or Administrator access required. Please upgrade or register as a Property Owner / Seller.",
+        message: "Seller or Administrator access required. Ask an administrator to assign Seller / Property Owner access.",
       });
     }
 

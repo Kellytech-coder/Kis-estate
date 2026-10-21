@@ -1,4 +1,5 @@
 const { db, auth, admin } = require("../config/firebase");
+const paymentController = require("./paymentController");
 
 // ========================================
 // GET ADMIN LIVE STATISTICS
@@ -43,11 +44,10 @@ const getStats = async (req, res, next) => {
     );
 
     // 2. Fetch users
-    const usersSnapshot = await db.collection("users").get();
-    const users = usersSnapshot.docs.map((doc) => ({
-      uid: doc.id,
-      ...doc.data(),
-    }));
+    const [usersSnapshot, legacyUsersSnapshot] = await Promise.all([db.collection("users").get(), db.collection("user").get()]);
+    const uniqueUsers = new Map();
+    [...legacyUsersSnapshot.docs, ...usersSnapshot.docs].forEach((doc) => uniqueUsers.set(doc.id, { uid: doc.id, ...doc.data() }));
+    const users = [...uniqueUsers.values()];
 
     const totalUsers = users.length;
     const totalSellers = users.filter((u) => {
@@ -85,6 +85,34 @@ const getStats = async (req, res, next) => {
     } catch {
       totalContactMessages = 0;
     }
+
+    const [ordersSnapshot, paymentsSnapshot] = await Promise.all([
+      db.collection("orders").get(),
+      db.collection("payments").get(),
+    ]);
+    const orders = ordersSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const payments = paymentsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const netRevenueKobo = (payment) => {
+      const amount = Number(payment.amountKobo) || 0;
+      if (payment.status === "refunded") return 0;
+      if (["partially_refunded", "refund_pending"].includes(payment.status)) return Math.max(0, amount - (Number(payment.refundAmountKobo) || 0));
+      return payment.status === "success" ? amount : 0;
+    };
+    const promotionPayments = payments.filter((payment) => ["success", "refund_pending", "partially_refunded", "refunded"].includes(payment.status));
+    const paidRevenueKobo = payments.reduce((sum, payment) => sum + netRevenueKobo(payment), 0);
+    const activePromotions = properties.filter((property) => paymentController.isFeaturedActive(property)).length;
+    const orderById = new Map(orders.map((order) => [order.id, order]));
+    const promotedInquiries = inquiries.filter((inquiry) => promotionPayments.some((payment) => {
+      if (payment.propertyId !== inquiry.propertyId) return false;
+      const order = orderById.get(payment.id);
+      const paidAt = payment.paidAt?.toDate?.() || (payment.paidAt ? new Date(payment.paidAt) : null);
+      const inquiryAt = inquiry.createdAt?.toDate?.() || (inquiry.createdAt ? new Date(inquiry.createdAt) : null);
+      if (!paidAt || !inquiryAt) return false;
+      const promotionEnds = new Date(paidAt.getTime() + (Number(order?.durationDays) || 0) * 86400000);
+      const refundAt = payment.refundedAt?.toDate?.() || (payment.refundedAt ? new Date(payment.refundedAt) : null);
+      const expiresAt = payment.status === "refunded" && refundAt && refundAt < promotionEnds ? refundAt : promotionEnds;
+      return inquiryAt >= paidAt && inquiryAt <= expiresAt;
+    })).length;
 
     // 5. Recent items (sorted newest first)
     const recentProperties = [...properties]
@@ -159,6 +187,13 @@ const getStats = async (req, res, next) => {
         pendingInquiries,
         completedInquiries,
         totalContactMessages,
+        totalOrders: orders.length,
+        paidOrders: orders.filter((order) => ["paid", "refund_pending", "partially_refunded", "refunded"].includes(payments.find((payment) => payment.id === order.id)?.status || order.status)).length,
+        failedPayments: payments.filter((payment) => payment.status === "failed").length,
+        refundedPayments: payments.filter((payment) => ["refunded", "partially_refunded"].includes(payment.status)).length,
+        paidRevenueNaira: paidRevenueKobo / 100,
+        activePromotions,
+        promotedInquiries,
         recentProperties,
         recentInquiries,
         recentUsers,
@@ -174,9 +209,10 @@ const getStats = async (req, res, next) => {
 // ========================================
 const getAllUsers = async (req, res, next) => {
   try {
-    const snapshot = await db.collection("users").get();
-    const users = snapshot.docs.map((doc) => {
-      const data = doc.data();
+    const [snapshot, legacySnapshot] = await Promise.all([db.collection("users").get(), db.collection("user").get()]);
+    const uniqueProfiles = new Map();
+    [...legacySnapshot.docs, ...snapshot.docs].forEach((doc) => uniqueProfiles.set(doc.id, { uid: doc.id, ...doc.data() }));
+    const users = [...uniqueProfiles.values()].map((data) => {
       const createdAt =
         data.createdAt?.toDate?.()?.toISOString?.() ||
         data.createdAt ||
@@ -185,12 +221,14 @@ const getAllUsers = async (req, res, next) => {
         data.updatedAt?.toDate?.()?.toISOString?.() ||
         data.updatedAt ||
         null;
+      const storedRole = (data.role || "BUYER_RENTER").toUpperCase();
+      const role = storedRole === "SELLER" ? "SELLER_PROPERTY_OWNER" : storedRole === "USER" ? "BUYER_RENTER" : storedRole;
 
       return {
-        uid: doc.id,
+        uid: data.uid,
         name: data.name || "User",
         email: data.email || "",
-        role: (data.role || "BUYER_RENTER").toUpperCase(),
+        role,
         phone: data.phone || "",
         agencyName: data.agencyName || "",
         preferredCity: data.preferredCity || "",
@@ -225,7 +263,14 @@ const updateUser = async (req, res, next) => {
     const { isActive, role, name, phone, agencyName } = req.body;
 
     const userRef = db.collection("users").doc(id);
-    const userDoc = await userRef.get();
+    let userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      const legacyDoc = await db.collection("user").doc(id).get();
+      if (legacyDoc.exists) {
+        await userRef.set({ ...legacyDoc.data(), uid: id });
+        userDoc = await userRef.get();
+      }
+    }
 
     if (!userDoc.exists) {
       return res.status(404).json({
@@ -238,9 +283,18 @@ const updateUser = async (req, res, next) => {
     if (isActive !== undefined) updates.isActive = Boolean(isActive);
     if (role !== undefined) {
       const validRoles = ["BUYER_RENTER", "SELLER_PROPERTY_OWNER", "ADMIN"];
-      if (validRoles.includes(role.toUpperCase())) {
-        updates.role = role.toUpperCase();
+      const normalizedRole = typeof role === "string" ? role.toUpperCase() : "";
+      if (!validRoles.includes(normalizedRole)) {
+        return res.status(400).json({ success: false, message: "Choose a valid account type" });
       }
+      if (req.user?.uid === id && normalizedRole !== "ADMIN") {
+        return res.status(400).json({ success: false, message: "You cannot remove your own administrator access" });
+      }
+      updates.role = normalizedRole;
+      if (normalizedRole === "BUYER_RENTER") updates.agencyName = "";
+      if (normalizedRole === "SELLER_PROPERTY_OWNER" && !userDoc.data().agencyName) updates.agencyName = "Independent Owner";
+      updates.roleUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
+      updates.roleUpdatedBy = req.user.uid;
     }
     if (name !== undefined) updates.name = String(name).trim();
     if (phone !== undefined) updates.phone = String(phone).trim();
@@ -280,7 +334,7 @@ const deleteUser = async (req, res, next) => {
     }
 
     // Delete from Firestore
-    await db.collection("users").doc(id).delete();
+    await Promise.all([db.collection("users").doc(id).delete(), db.collection("user").doc(id).delete()]);
 
     // Delete from Firebase Auth if possible
     try {

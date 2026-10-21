@@ -8,6 +8,7 @@ const {
   getMe,
   updateProfile,
   registerProfile,
+  becomeSeller,
   getFavorites,
   addFavorite,
   removeFavorite,
@@ -36,6 +37,7 @@ router.get("/me", authenticate, getMe);
 // REGISTER / INITIALIZE PROFILE
 // ===============================
 router.post("/register-profile", authenticate, registerProfile);
+router.post("/become-seller", authenticate, becomeSeller);
 
 // ===============================
 // UPDATE PROFILE

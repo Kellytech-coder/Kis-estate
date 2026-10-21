@@ -137,7 +137,7 @@ export default function PropertyCard({ property, className = "" }: PropertyCardP
           </div>
           <div className="flex items-center justify-center gap-1.5">
             <Square className="w-4 h-4 text-indigo-500 shrink-0" />
-            <span>{formatNumber(property.areaSqFt)} sqft</span>
+            <span>{formatNumber(property.areaSqFt)} {property.areaUnit || "sqft"}</span>
           </div>
         </div>
 

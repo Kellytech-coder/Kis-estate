@@ -107,7 +107,7 @@ export async function apiRequest<T = unknown>(
       const isMissingApiRoute = response.status === 404 &&
         (!responseMessage || /route not found|page could not be found/i.test(responseMessage));
       const errorMessage = isMissingApiRoute
-        ? `API endpoint ${endpoint} was not found. Set NEXT_PUBLIC_API_URL to the deployed Express backend URL and redeploy.`
+        ? `API endpoint ${endpoint} is missing from the running backend at ${API_BASE_URL}. Restart the backend or deploy the latest backend code.`
         : responseMessage ||
         `Request failed with status ${response.status} (${response.statusText})`;
       const error = new Error(errorMessage) as Error & { status?: number; data?: unknown };
@@ -159,6 +159,10 @@ export const propertiesApi = {
     return apiRequest<{ success: boolean; data: Property }>(`/api/properties/${id}`);
   },
 
+  async recordView(id: string): Promise<void> {
+    await apiRequest(`/api/properties/${id}/view`, { method: "POST" });
+  },
+
   async create(propertyData: Partial<Property>): Promise<{ success: boolean; data: Property; message: string }> {
     return apiRequest<{ success: boolean; data: Property; message: string }>("/api/properties", {
       method: "POST",
@@ -182,6 +186,28 @@ export const propertiesApi = {
       method: "DELETE",
     });
   },
+};
+
+export type PromotionPlan = { id: string; name: string; amountKobo: number; currency: string; durationDays: number; active: boolean };
+export type PromotionOrder = { id: string; propertyId: string; planName: string; amountKobo: number; currency: string; status: string; createdAt: string | null; paidAt?: string | null };
+export type AdminPaymentOrder = {
+  id: string; propertyId: string; propertyTitle: string; sellerId: string;
+  sellerName: string; sellerEmail: string; planName: string; amountNaira: number;
+  currency: string; status: string; provider: string; createdAt: string | null;
+  paidAt: string | null; refundedAt: string | null; refundAmountNaira: number; views: number; inquiries: number;
+};
+export type AdminPaymentReport = {
+  orders: AdminPaymentOrder[];
+  summary: {
+    orders: number; paid: number; failed: number; refunds: number; revenueNaira: number;
+    promotedViews: number; promotedInquiries: number; totalSellers: number; payingSellers: number; sellerConversionRate: number;
+  };
+};
+export const paymentsApi = {
+  async getPlans() { return apiRequest<{ success: boolean; data: PromotionPlan[] }>("/api/payments/plans"); },
+  async getOrders() { return apiRequest<{ success: boolean; data: PromotionOrder[] }>("/api/payments/orders"); },
+  async checkout(propertyId: string, planId: string) { return apiRequest<{ success: boolean; data: { authorizationUrl: string; reference: string } }>("/api/payments/checkout", { method: "POST", body: JSON.stringify({ propertyId, planId }) }); },
+  async confirm(reference: string) { return apiRequest<{ success: boolean; data: { status: string; promotionEndsAt: string | null } }>("/api/payments/confirm", { method: "POST", body: JSON.stringify({ reference }) }); },
 };
 
 /**
@@ -245,8 +271,8 @@ export const authApi = {
     });
   },
 
-  async getMe(): Promise<{ success: boolean; user: User }> {
-    return apiRequest<{ success: boolean; user: User }>("/api/auth/me");
+  async getMe(): Promise<{ success: boolean; profileExists?: boolean; user: User }> {
+    return apiRequest<{ success: boolean; profileExists?: boolean; user: User }>("/api/auth/me");
   },
 
   async registerProfile(profileData: {
@@ -260,6 +286,13 @@ export const authApi = {
     return apiRequest<{ success: boolean; user: User; message: string }>("/api/auth/register-profile", {
       method: "POST",
       body: JSON.stringify(profileData),
+    });
+  },
+
+  async becomeSeller(): Promise<{ success: boolean; user: User; message: string }> {
+    return apiRequest<{ success: boolean; user: User; message: string }>("/api/auth/become-seller", {
+      method: "POST",
+      body: JSON.stringify({}),
     });
   },
 
@@ -320,6 +353,13 @@ export interface AdminStats {
   pendingInquiries: number;
   completedInquiries: number;
   totalContactMessages: number;
+  totalOrders: number;
+  paidOrders: number;
+  failedPayments: number;
+  refundedPayments: number;
+  paidRevenueNaira: number;
+  activePromotions: number;
+  promotedInquiries: number;
   recentProperties: Array<{
     id: string;
     title: string;
@@ -370,6 +410,21 @@ export const adminApi = {
 
   async getUsers(): Promise<{ success: boolean; count: number; data: AdminUser[] }> {
     return apiRequest<{ success: boolean; count: number; data: AdminUser[] }>("/api/admin/users");
+  },
+
+  async getPaymentReport(): Promise<{ success: boolean; data: AdminPaymentReport }> {
+    return apiRequest<{ success: boolean; data: AdminPaymentReport }>("/api/admin/payments");
+  },
+
+  async getPromotionPlan(): Promise<{ success: boolean; data: PromotionPlan }> {
+    return apiRequest<{ success: boolean; data: PromotionPlan }>("/api/admin/promotion-plan");
+  },
+
+  async updatePromotionPlan(data: { amountKobo: number; durationDays: number; active: boolean }): Promise<{ success: boolean; data: PromotionPlan; message: string }> {
+    return apiRequest<{ success: boolean; data: PromotionPlan; message: string }>("/api/admin/promotion-plan", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   },
 
   async updateUser(

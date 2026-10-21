@@ -122,20 +122,11 @@ const getMe = async (req, res) => {
     }
 
     if (!userSnapshot.exists) {
-      // Auto-create base profile in Firestore to ensure consistency across web and mobile
-      const defaultProfile = {
-        uid: userRecord.uid,
-        email: userRecord.email || null,
-        name: userRecord.displayName || "User",
-        role: "BUYER_RENTER",
-        isActive: true,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      };
-      await db.collection("users").doc(uid).set(defaultProfile, { merge: true });
-
+      // Do not persist a default buyer profile here: during registration the
+      // auth listener can call /me before register-profile saves the selected role.
       return res.status(200).json({
         success: true,
+        profileExists: false,
         user: {
           uid: userRecord.uid,
           email: userRecord.email || null,
@@ -150,6 +141,7 @@ const getMe = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      profileExists: true,
       user: {
         uid: userRecord.uid,
         email: profile.email || userRecord.email || null,
@@ -253,7 +245,10 @@ const registerProfile = async (req, res) => {
     const cleanCity = preferredCity ? String(preferredCity).trim() : "";
 
     const userRef = db.collection("users").doc(uid);
-    const existingDoc = await userRef.get();
+    let existingDoc = await userRef.get();
+    if (!existingDoc.exists) existingDoc = await db.collection("user").doc(uid).get();
+    const isNewProfile = !existingDoc.exists;
+    const existingData = existingDoc.exists ? existingDoc.data() || {} : {};
 
     const userProfile = {
       uid,
@@ -262,20 +257,17 @@ const registerProfile = async (req, res) => {
       phone: cleanPhone,
       agencyName: cleanAgency,
       preferredCity: cleanCity,
-      role: allowedRole,
+      role: isNewProfile ? allowedRole : (existingData.role || allowedRole),
       isActive: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    if (!existingDoc.exists) {
+    if (isNewProfile) {
       userProfile.createdAt = admin.firestore.FieldValue.serverTimestamp();
       await userRef.set(userProfile);
     } else {
-      const existingData = existingDoc.data() || {};
-      // Never downgrade an existing ADMIN role
-      if (existingData.role === "ADMIN") {
-        delete userProfile.role;
-      }
+      // Registration may update contact details, but account type changes are
+      // reserved for administrators after the initial profile is created.
       await userRef.set(userProfile, { merge: true });
     }
 
@@ -303,6 +295,55 @@ const registerProfile = async (req, res) => {
       message: "Failed to create user profile",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
+  }
+};
+
+// ========================================
+// UPGRADE OWN ACCOUNT TO SELLER
+// ========================================
+const becomeSeller = async (req, res) => {
+  try {
+    const uid = req.user?.uid;
+    if (!uid) return res.status(401).json({ success: false, message: "Authentication required" });
+
+    const userRef = db.collection("users").doc(uid);
+    let userSnapshot = await userRef.get();
+    if (!userSnapshot.exists) {
+      const legacySnapshot = await db.collection("user").doc(uid).get();
+      if (legacySnapshot.exists) {
+        await userRef.set({ ...legacySnapshot.data(), uid }, { merge: true });
+        userSnapshot = await userRef.get();
+      }
+    }
+
+    const profile = userSnapshot.exists ? userSnapshot.data() || {} : {};
+    if (profile.isActive === false) {
+      return res.status(403).json({ success: false, message: "Your account is inactive" });
+    }
+    if ((profile.role || "").toUpperCase() === "ADMIN") {
+      return res.status(400).json({ success: false, message: "Administrator accounts cannot be changed to seller accounts" });
+    }
+
+    const updates = {
+      uid,
+      name: profile.name || req.user.name || "Property Owner",
+      email: profile.email || req.user.email || null,
+      role: "SELLER_PROPERTY_OWNER",
+      agencyName: profile.agencyName || "Independent Owner",
+      isActive: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (!userSnapshot.exists) updates.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    await userRef.set(updates, { merge: true });
+
+    return res.status(200).json({
+      success: true,
+      message: "Your account is now set up as a Seller / Property Owner",
+      user: { uid, name: updates.name, email: updates.email, role: updates.role, agencyName: updates.agencyName },
+    });
+  } catch (error) {
+    console.error("Seller account upgrade error:", error);
+    return res.status(500).json({ success: false, message: "Could not upgrade this account to Seller / Owner" });
   }
 };
 
@@ -404,6 +445,7 @@ module.exports = {
   getMe,
   updateProfile,
   registerProfile,
+  becomeSeller,
   getFavorites,
   addFavorite,
   removeFavorite,

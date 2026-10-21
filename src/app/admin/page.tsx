@@ -43,7 +43,7 @@ import {
   ListingType,
   Inquiry,
 } from "@/store/propertyStore";
-import { authApi, adminApi, AdminStats, AdminUser } from "@/lib/api";
+import { authApi, adminApi, AdminPaymentReport, AdminStats, AdminUser, PromotionPlan } from "@/lib/api";
 import { formatCurrency, formatPrice, formatDate, useIsMounted } from "@/lib/utils";
 import { uploadMultiplePropertyImages, validateImageFile } from "@/lib/storage";
 
@@ -83,6 +83,7 @@ export default function AdminPage() {
 
   const {
     properties,
+    currentUser,
     isLoadingProperties,
     fetchProperties,
     addProperty,
@@ -100,13 +101,19 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Active Navigation Tab
-  const [activeTab, setActiveTab] = useState<"overview" | "properties" | "users" | "inquiries">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "properties" | "users" | "inquiries" | "monetization">("overview");
 
   // Admin Live Data
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [usersList, setUsersList] = useState<AdminUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [paymentReport, setPaymentReport] = useState<AdminPaymentReport | null>(null);
+  const [promotionPlan, setPromotionPlan] = useState<PromotionPlan | null>(null);
+  const [promotionPriceNaira, setPromotionPriceNaira] = useState("");
+  const [promotionDurationDays, setPromotionDurationDays] = useState("7");
+  const [promotionActive, setPromotionActive] = useState(true);
+  const [isSavingPromotionPlan, setIsSavingPromotionPlan] = useState(false);
 
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -136,7 +143,6 @@ export default function AdminPage() {
   const [propBaths, setPropBaths] = useState(4);
   const [propSqFt, setPropSqFt] = useState(3800);
   const [propParking, setPropParking] = useState(3);
-  const [propFeatured, setPropFeatured] = useState(true);
   const [propStatus, setPropStatus] = useState<Property["status"]>("available");
   const [propAmenities, setPropAmenities] = useState(
     "24/7 Power Supply, Swimming Pool, CCTV, Smart Home, Fitted Modern Kitchen, Security Gatehouse"
@@ -151,15 +157,24 @@ export default function AdminPage() {
     setIsLoadingStats(true);
     setIsLoadingUsers(true);
     try {
-      const [statsRes, usersRes] = await Promise.all([
+      const [statsRes, usersRes, paymentsRes, planRes] = await Promise.all([
         adminApi.getStats().catch(() => null),
         adminApi.getUsers().catch(() => null),
+        adminApi.getPaymentReport().catch(() => null),
+        adminApi.getPromotionPlan().catch(() => null),
         fetchProperties(),
         fetchInquiries(),
       ]);
 
       if (statsRes?.data) setStats(statsRes.data);
       if (usersRes?.data) setUsersList(usersRes.data);
+      if (paymentsRes?.data) setPaymentReport(paymentsRes.data);
+      if (planRes?.data) {
+        setPromotionPlan(planRes.data);
+        setPromotionPriceNaira(String(planRes.data.amountKobo / 100));
+        setPromotionDurationDays(String(planRes.data.durationDays));
+        setPromotionActive(planRes.data.active);
+      }
     } catch (err) {
       console.error("Failed to load admin stats/users:", err);
     } finally {
@@ -267,7 +282,6 @@ export default function AdminPage() {
     setPropBaths(4);
     setPropSqFt(3800);
     setPropParking(3);
-    setPropFeatured(true);
     setPropStatus("available");
     setPropAmenities("24/7 Power Supply, Swimming Pool, CCTV, Smart Home, Fitted Modern Kitchen, Security Gatehouse");
     setPropImages([]);
@@ -291,7 +305,6 @@ export default function AdminPage() {
     setPropBaths(prop.bathrooms);
     setPropSqFt(prop.areaSqFt);
     setPropParking(prop.parking || 2);
-    setPropFeatured(prop.featured);
     setPropStatus(prop.status);
     setPropAmenities((prop.amenities || []).join(", "));
     setPropImages(prop.images || []);
@@ -344,9 +357,9 @@ export default function AdminPage() {
         bathrooms: Number(propBaths),
         parking: Number(propParking),
         areaSqFt: Number(propSqFt),
+        areaUnit: propPropertyType === "land" ? "sqm" : "sqft",
         yearBuilt: new Date().getFullYear(),
         images: propImages,
-        featured: propFeatured,
         amenities: amenitiesList.length > 0 ? amenitiesList : ["24/7 Power Supply"],
         status: propStatus,
       };
@@ -407,6 +420,43 @@ export default function AdminPage() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : "Failed to update user status.";
       alert(errMsg);
+    }
+  };
+
+  const handleChangeUserRole = async (user: AdminUser, role: AdminUser["role"]) => {
+    try {
+      await adminApi.updateUser(user.uid, { role });
+      setUsersList((items) => items.map((item) => item.uid === user.uid ? { ...item, role } : item));
+      setActionSuccess(`${user.name}'s account type changed to ${role === "SELLER_PROPERTY_OWNER" ? "Seller" : role === "BUYER_RENTER" ? "Buyer / Renter" : "Administrator"}.`);
+      setTimeout(() => setActionSuccess(""), 3500);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to change account type.");
+    }
+  };
+
+  const handleSavePromotionPlan = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const priceNaira = Number(promotionPriceNaira);
+    const durationDays = Number(promotionDurationDays);
+    if (!Number.isFinite(priceNaira) || priceNaira < 1 || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 90) {
+      setActionSuccess("");
+      alert("Enter a valid price of at least ₦1 and a duration from 1 to 90 days.");
+      return;
+    }
+    setIsSavingPromotionPlan(true);
+    try {
+      const response = await adminApi.updatePromotionPlan({
+        amountKobo: Math.round(priceNaira * 100),
+        durationDays,
+        active: promotionActive,
+      });
+      setPromotionPlan(response.data);
+      setActionSuccess(response.message);
+      setTimeout(() => setActionSuccess(""), 3500);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not update the promotion plan.");
+    } finally {
+      setIsSavingPromotionPlan(false);
     }
   };
 
@@ -626,6 +676,16 @@ export default function AdminPage() {
             >
               📬 Inquiries ({inquiries.length})
             </button>
+            <button
+              onClick={() => setActiveTab("monetization")}
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "monetization"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              }`}
+            >
+              Revenue &amp; Promotions
+            </button>
           </div>
         </div>
       </div>
@@ -708,6 +768,21 @@ export default function AdminPage() {
                 <div className="text-[11px] text-gray-400">Total listed for-sale valuation</div>
               </div>
             </div>
+
+            <section className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-900">Promotion revenue</h3>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                {[
+                  ["Revenue", formatCurrency(stats?.paidRevenueNaira ?? 0)],
+                  ["Orders", String(stats?.totalOrders ?? 0)],
+                  ["Paid", String(stats?.paidOrders ?? 0)],
+                  ["Failed", String(stats?.failedPayments ?? 0)],
+                  ["Refunded", String(stats?.refundedPayments ?? 0)],
+                  ["Active boosts", String(stats?.activePromotions ?? 0)],
+                ].map(([label, value]) => <div key={label}><div className="text-[10px] font-semibold uppercase text-gray-500">{label}</div><div className="mt-1 text-lg font-extrabold text-gray-900">{value}</div></div>)}
+              </div>
+              <p className="mt-3 text-[11px] text-gray-500">Promoted listings have generated {stats?.promotedInquiries ?? 0} inquiries.</p>
+            </section>
 
             {/* Recent Feeds Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -830,6 +905,76 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === "monetization" && (
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-sm">
+              <div className="mb-5">
+                <h2 className="text-lg font-bold text-gray-900">Promotion pricing</h2>
+                <p className="mt-1 text-xs text-gray-500">Set what sellers pay to feature a property. Changes apply to new checkouts; existing orders keep their original price and duration.</p>
+              </div>
+              <form onSubmit={(event) => void handleSavePromotionPlan(event)} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+                <label className="space-y-1.5 text-xs font-semibold text-gray-700">
+                  Price (NGN)
+                  <input type="number" min="1" step="0.01" required value={promotionPriceNaira} onChange={(event) => setPromotionPriceNaira(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
+                </label>
+                <label className="space-y-1.5 text-xs font-semibold text-gray-700">
+                  Duration (days)
+                  <input type="number" min="1" max="90" step="1" required value={promotionDurationDays} onChange={(event) => setPromotionDurationDays(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm" />
+                </label>
+                <label className="flex items-center gap-2 pb-2.5 text-xs font-semibold text-gray-700">
+                  <input type="checkbox" checked={promotionActive} onChange={(event) => setPromotionActive(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
+                  Available to sellers
+                </label>
+                <button type="submit" disabled={isSavingPromotionPlan || !promotionPlan} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
+                  {isSavingPromotionPlan ? "Saving..." : "Save promotion price"}
+                </button>
+              </form>
+              {promotionPlan && <p className="mt-4 text-[11px] text-gray-500">Current offer: {promotionPlan.name} · {formatCurrency(promotionPlan.amountKobo / 100)} · {promotionPlan.durationDays} days · {promotionPlan.active ? "Active" : "Paused"}</p>}
+            </section>
+
+            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+              {[
+                ["Net revenue", formatCurrency(paymentReport?.summary.revenueNaira ?? stats?.paidRevenueNaira ?? 0)],
+                ["Paid purchases", String(paymentReport?.summary.paid ?? stats?.paidOrders ?? 0)],
+                ["Failed", String(paymentReport?.summary.failed ?? stats?.failedPayments ?? 0)],
+                ["Refunds", String(paymentReport?.summary.refunds ?? stats?.refundedPayments ?? 0)],
+                ["Paying sellers", String(paymentReport?.summary.payingSellers ?? 0)],
+                ["Seller conversion", `${paymentReport?.summary.sellerConversionRate ?? 0}%`],
+                ["Promoted views", String(paymentReport?.summary.promotedViews ?? 0)],
+              ].map(([label, value]) => <div key={label} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"><div className="text-[10px] font-semibold uppercase text-gray-500">{label}</div><div className="mt-1 text-lg font-extrabold text-gray-900">{value}</div></div>)}
+            </section>
+
+            <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-100 p-5">
+                <h2 className="text-sm font-bold text-gray-900">Promotion payment performance</h2>
+                <p className="mt-1 text-[11px] text-gray-500">Purchases, payment outcomes, refunds, and inquiries received during each promotion.</p>
+              </div>
+              {!paymentReport ? (
+                <p className="p-6 text-xs text-gray-500">Payment report is unavailable. Refresh to try again.</p>
+              ) : paymentReport.orders.length === 0 ? (
+                <p className="p-6 text-xs text-gray-500">No promotion orders have been placed yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] text-left text-xs">
+                    <thead className="bg-gray-50 text-[10px] uppercase text-gray-500"><tr><th className="px-4 py-3">Listing / Seller</th><th className="px-4 py-3">Offer</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Views</th><th className="px-4 py-3">Inquiries</th><th className="px-4 py-3">Created</th></tr></thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paymentReport.orders.map((order) => <tr key={order.id}>
+                        <td className="px-4 py-3"><div className="font-semibold text-gray-900">{order.propertyTitle}</div><div className="mt-0.5 text-[10px] text-gray-500">{order.sellerName}{order.sellerEmail ? ` · ${order.sellerEmail}` : ""}</div></td>
+                        <td className="px-4 py-3 text-gray-600">{order.planName}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">{formatCurrency(order.amountNaira)}{order.refundAmountNaira > 0 && <div className="text-[10px] font-normal text-rose-600">Refunded {formatCurrency(order.refundAmountNaira)}</div>}</td>
+                        <td className="px-4 py-3"><span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold capitalize text-gray-700">{order.status.replaceAll("_", " ")}</span></td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{order.views}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{order.inquiries}</td>
+                        <td className="px-4 py-3 text-gray-500">{order.createdAt ? formatDate(order.createdAt) : "—"}</td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </div>
         )}
 
@@ -1057,6 +1202,17 @@ export default function AdminPage() {
                             >
                               {u.role === "SELLER_PROPERTY_OWNER" ? "Seller / Agent" : u.role}
                             </span>
+                            <select
+                              aria-label={`Account type for ${u.name}`}
+                              value={u.role}
+                              disabled={u.uid === currentUser?.uid}
+                              onChange={(event) => void handleChangeUserRole(u, event.target.value as AdminUser["role"])}
+                              className="mt-2 block w-full max-w-[170px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100"
+                            >
+                              <option value="BUYER_RENTER">Buyer / Renter</option>
+                              <option value="SELLER_PROPERTY_OWNER">Seller / Owner</option>
+                              <option value="ADMIN">Administrator</option>
+                            </select>
                           </td>
                           <td className="py-3.5 px-4 text-gray-600">
                             <div>{u.phone || "—"}</div>
@@ -1421,7 +1577,7 @@ export default function AdminPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-gray-700">Area (sqft)</label>
+                    <label className="block text-[11px] font-semibold text-gray-700">{propPropertyType === "land" ? "Plot Size (sqm)" : "Floor Area (sqft)"}</label>
                     <input
                       type="number"
                       min={0}

@@ -27,7 +27,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { usePropertyStore, Property, PropertyType, ListingType, Inquiry } from "@/store/propertyStore";
-import { propertiesApi, inquiriesApi, authApi } from "@/lib/api";
+import { propertiesApi, inquiriesApi, authApi, paymentsApi, PromotionOrder, PromotionPlan } from "@/lib/api";
 import { formatCurrency, formatPrice, useIsMounted } from "@/lib/utils";
 import { uploadMultiplePropertyImages, validateImageFile } from "@/lib/storage";
 
@@ -77,11 +77,14 @@ const POPULAR_AMENITIES = [
 ];
 
 export default function SellerPortalPage() {
-  const { currentUser, isLoadingUser } = usePropertyStore();
+  const { currentUser, isLoadingUser, setCurrentUser } = usePropertyStore();
   const mounted = useIsMounted();
 
   const [myProperties, setMyProperties] = useState<Property[]>([]);
   const [myInquiries, setMyInquiries] = useState<Inquiry[]>([]);
+  const [promotionOrders, setPromotionOrders] = useState<PromotionOrder[]>([]);
+  const [promotionPlan, setPromotionPlan] = useState<PromotionPlan | null>(null);
+  const [checkoutPropertyId, setCheckoutPropertyId] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [activeTab, setActiveTab] = useState<"properties" | "inquiries" | "profile">("properties");
 
@@ -122,21 +125,31 @@ export default function SellerPortalPage() {
   const [profilePhone, setProfilePhone] = useState("");
   const [profileAgency, setProfileAgency] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUpgradingAccount, setIsUpgradingAccount] = useState(false);
 
   // Check role
   const isSellerOrAdmin =
     currentUser?.role?.toUpperCase() === "SELLER_PROPERTY_OWNER" ||
     currentUser?.role?.toUpperCase() === "SELLER" ||
     currentUser?.role?.toUpperCase() === "ADMIN";
+  const isLand = propertyType === "land";
 
   const loadSellerData = useCallback(async () => {
-    if (!currentUser) return;
+    if (!currentUser || !isSellerOrAdmin) {
+      setIsLoadingData(false);
+      return;
+    }
     setIsLoadingData(true);
     try {
-      const [propRes, inqRes] = await Promise.all([
+      const [propRes, inqRes, ordersRes, plansRes] = await Promise.all([
         propertiesApi.getMyProperties(),
         inquiriesApi.getAll(),
+        paymentsApi.getOrders().catch(() => null),
+        paymentsApi.getPlans().catch(() => null),
       ]);
+
+      if (ordersRes?.data) setPromotionOrders(ordersRes.data);
+      if (plansRes?.data?.[0]) setPromotionPlan(plansRes.data[0]);
 
       if (propRes?.data) {
         setMyProperties(propRes.data);
@@ -149,20 +162,80 @@ export default function SellerPortalPage() {
         setMyInquiries(sellerInquiries);
       }
     } catch (err: unknown) {
-      console.error("Failed to load seller data:", err);
+      const status = (err as { status?: number })?.status;
+      const message = (err as Error)?.message || "";
+      if (status === 403 && message.includes("Seller or Administrator access required")) {
+        try {
+          const profile = await authApi.getMe();
+          setCurrentUser({ ...currentUser, ...profile.user });
+        } catch {
+          // Keep the current session; the seller access message below explains the next step.
+        }
+        setFeedbackMsg({
+          type: "error",
+          text: "The server has this account registered as a buyer. An administrator can change its account type to Seller / Owner.",
+        });
+      } else if (status === 403) {
+        setFeedbackMsg({ type: "error", text: message || "This account does not have access to seller tools." });
+      } else {
+        console.error("Failed to load seller data:", err);
+      }
     } finally {
       setIsLoadingData(false);
     }
-  }, [currentUser]);
+  }, [currentUser, isSellerOrAdmin]);
 
   useEffect(() => {
-    if (currentUser) {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (!reference || !currentUser || !isSellerOrAdmin) return;
+    void paymentsApi.confirm(reference).then(async () => {
+      setFeedbackMsg({ type: "success", text: "Payment confirmed. Your featured promotion is active." });
+      await loadSellerData();
+      window.history.replaceState({}, "", window.location.pathname);
+    }).catch((error: unknown) => {
+      setFeedbackMsg({ type: "error", text: (error as Error)?.message || "Payment is still processing. Refresh in a moment." });
+      void loadSellerData();
+    });
+  }, [currentUser, isSellerOrAdmin, loadSellerData]);
+
+  const handlePromote = async (propertyId: string) => {
+    if (!promotionPlan) return;
+    setCheckoutPropertyId(propertyId);
+    try {
+      const checkout = await paymentsApi.checkout(propertyId, promotionPlan.id);
+      window.location.assign(checkout.data.authorizationUrl);
+    } catch (error) {
+      setFeedbackMsg({ type: "error", text: (error as Error)?.message || "Could not start payment." });
+      setCheckoutPropertyId(null);
+    }
+  };
+
+  const handleBecomeSeller = async () => {
+    setIsUpgradingAccount(true);
+    setFeedbackMsg(null);
+    try {
+      const response = await authApi.becomeSeller();
+      if (!currentUser) return;
+      setCurrentUser({ ...currentUser, ...response.user, id: currentUser.id || response.user.uid });
+      setFeedbackMsg({ type: "success", text: response.message });
+    } catch (error) {
+      setFeedbackMsg({ type: "error", text: (error as Error)?.message || "Could not upgrade this account." });
+    } finally {
+      setIsUpgradingAccount(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser && isSellerOrAdmin) {
       setProfileName(currentUser.name || "");
       setProfilePhone(currentUser.phone || "");
       setProfileAgency(currentUser.agencyName || "");
       void loadSellerData();
+    } else {
+      setIsLoadingData(false);
     }
-  }, [currentUser, loadSellerData]);
+  }, [currentUser, isSellerOrAdmin, loadSellerData]);
 
   // Add image URL to list
   const handleAddImageUrl = () => {
@@ -290,6 +363,10 @@ export default function SellerPortalPage() {
       setFeedbackMsg({ type: "error", text: "Please provide a valid property title and price in Naira (₦)." });
       return;
     }
+    if (imageList.length === 0) {
+      setFeedbackMsg({ type: "error", text: "Upload at least one photo of this property before publishing." });
+      return;
+    }
 
     setIsSubmitting(true);
     setFeedbackMsg(null);
@@ -311,11 +388,10 @@ export default function SellerPortalPage() {
       bathrooms: Number(bathrooms) || 0,
       parking: Number(parking) || 0,
       areaSqFt: Number(areaSqFt) || 0,
+      areaUnit: isLand ? "sqm" : "sqft",
       yearBuilt: Number(yearBuilt) || new Date().getFullYear(),
       status,
-      images: imageList.length > 0 ? imageList : [
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80"
-      ],
+      images: imageList,
       amenities: selectedAmenities,
       agent: {
         name: currentUser?.name || "Property Owner",
@@ -362,6 +438,15 @@ export default function SellerPortalPage() {
       );
     } catch (err: unknown) {
       alert("Failed to update status: " + ((err as Error)?.message || ""));
+    }
+  };
+
+  const handleUpdateInquiryStatus = async (id: string, newStatus: Inquiry["status"]) => {
+    try {
+      await inquiriesApi.updateStatus(id, newStatus);
+      setMyInquiries((items) => items.map((inquiry) => inquiry.id === id ? { ...inquiry, status: newStatus } : inquiry));
+    } catch (error) {
+      setFeedbackMsg({ type: "error", text: (error as Error)?.message || "Could not update inquiry status." });
     }
   };
 
@@ -442,23 +527,18 @@ export default function SellerPortalPage() {
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-gray-900">Buyer / Renter Account</h2>
           <p className="text-xs text-gray-600 leading-relaxed">
-            Your current account is registered as a <strong>Buyer / Renter</strong>. To create and manage property listings, you need a <strong>Seller / Property Owner</strong> account.
+            This account is set up for finding a home. Upgrade to Seller / Property Owner to add listings and manage inquiries.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/dashboard"
-            className="py-2.5 px-5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-xl"
-          >
-            Go to Buyer Dashboard
-          </Link>
-          <Link
-            href="/register"
-            className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-200"
-          >
-            Register as Seller / Owner
-          </Link>
-        </div>
+        {feedbackMsg && <p role="status" className={`text-xs ${feedbackMsg.type === "error" ? "text-red-600" : "text-green-700"}`}>{feedbackMsg.text}</p>}
+        <button
+          type="button"
+          onClick={handleBecomeSeller}
+          disabled={isUpgradingAccount}
+          className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-200"
+        >
+          {isUpgradingAccount ? "Setting up Seller account..." : "Upgrade to Seller / Owner"}
+        </button>
       </div>
     );
   }
@@ -475,8 +555,8 @@ export default function SellerPortalPage() {
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
             {currentUser.agencyName || currentUser.name || "Seller Portal"}
           </h1>
-          <p className="text-xs sm:text-sm text-gray-300">
-            Manage your verified Nigerian real estate listings, inquiries, and client appointments.
+          <p className="max-w-xl text-xs sm:text-sm text-gray-300">
+            List a house, apartment, or land for sale or rent. Add the property details and upload photos for buyers and renters to view.
           </p>
         </div>
 
@@ -486,7 +566,7 @@ export default function SellerPortalPage() {
           className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-900/50 transition-all cursor-pointer hover:scale-105 shrink-0"
         >
           <Plus className="w-5 h-5" />
-          <span>Add New Property</span>
+          <span>List a House or Land</span>
         </button>
       </div>
 
@@ -600,6 +680,16 @@ export default function SellerPortalPage() {
       {/* TAB 1: PROPERTIES */}
       {activeTab === "properties" && (
         <div className="space-y-4">
+          <section className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="font-bold text-gray-900">Featured promotion</h3>
+                <p className="mt-1 text-xs text-gray-600">Boost one property for {promotionPlan?.durationDays || 7} days for ₦{((promotionPlan?.amountKobo || 0) / 100).toLocaleString()}.</p>
+              </div>
+              <div className="text-xs text-gray-600">{promotionOrders.length} payment{promotionOrders.length === 1 ? "" : "s"} · {promotionOrders.filter((order) => order.status === "paid").length} completed</div>
+            </div>
+            {promotionOrders.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{promotionOrders.slice(0, 4).map((order) => <span key={order.id} className="rounded-full bg-white px-3 py-1.5 text-[11px] text-gray-600">{order.planName}: <strong className="capitalize">{order.status}</strong></span>)}</div>}
+          </section>
           {isLoadingData ? (
             <div className="py-16 text-center space-y-3">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
@@ -612,14 +702,14 @@ export default function SellerPortalPage() {
               </div>
               <h3 className="text-lg font-bold text-gray-900">No properties listed yet</h3>
               <p className="text-xs text-gray-500 max-w-md mx-auto">
-                You haven&apos;t published any real estate listings yet. Click the button below to add your first property in Lagos, Abuja, or across Nigeria.
+                Add a house, apartment, or plot of land, choose whether it is for sale or rent, and upload photos from your device.
               </p>
               <button
                 type="button"
                 onClick={handleOpenCreateModal}
                 className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
               >
-                + Add First Property
+                + Create Your First Listing
               </button>
             </div>
           ) : (
@@ -672,12 +762,18 @@ export default function SellerPortalPage() {
                       <div className="text-lg font-extrabold text-indigo-600">
                         {formatPrice(prop.price, prop.type)}
                       </div>
+                      {prop.featured && prop.featuredUntil && new Date(prop.featuredUntil) > new Date() && <div className="text-[11px] font-semibold text-amber-700">Featured until {new Date(prop.featuredUntil).toLocaleDateString()}</div>}
                       <div className="flex items-center gap-3 text-xs text-gray-600 pt-2 border-t border-gray-100">
                         <span>{prop.bedrooms} Beds</span>
                         <span>•</span>
                         <span>{prop.bathrooms} Baths</span>
                         <span>•</span>
                         <span className="capitalize">{prop.propertyType}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 pt-1 text-[11px] text-gray-500">
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{(prop.viewCount || 0).toLocaleString()} detail views</span>
+                        {prop.featured && <span className="text-amber-700">· {(prop.featuredViewCount || 0).toLocaleString()} while promoted</span>}
                       </div>
                     </div>
                   </div>
@@ -700,6 +796,7 @@ export default function SellerPortalPage() {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {(!prop.featuredUntil || new Date(prop.featuredUntil) <= new Date()) && <button onClick={() => void handlePromote(prop.id)} disabled={!promotionPlan || checkoutPropertyId === prop.id} className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50">{checkoutPropertyId === prop.id ? "Opening…" : "Promote"}</button>}
                       <Link
                         href={`/properties/${prop.id}`}
                         target="_blank"
@@ -760,17 +857,12 @@ export default function SellerPortalPage() {
                       </span>
                       <h4 className="text-sm font-extrabold text-gray-900">{inq.userName}</h4>
                     </div>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase self-start sm:self-auto ${
-                        inq.status === "confirmed"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : inq.status === "completed"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {inq.status}
-                    </span>
+                    <select value={inq.status} onChange={(event) => void handleUpdateInquiryStatus(inq.id, event.target.value as Inquiry["status"])} className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-[10px] font-bold uppercase text-gray-700">
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
                   </div>
 
                   <div className="flex flex-wrap gap-4 text-xs text-gray-500">
@@ -882,7 +974,7 @@ export default function SellerPortalPage() {
             <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">
-                  {editingPropertyId ? "Edit Property Listing" : "Add New Nigerian Property"}
+                  {editingPropertyId ? "Edit Property Listing" : "List a Property for Sale or Rent"}
                 </h3>
                 <p className="text-xs text-gray-500">
                   Fill in genuine details and price in Nigerian Naira (₦).
@@ -910,7 +1002,7 @@ export default function SellerPortalPage() {
                     required
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. 5-Bedroom Contemporary Duplex with Pool in Lekki Phase 1"
+                    placeholder={isLand ? "e.g. 600 sqm residential plot in Lekki Phase 1" : type === "rent" ? "e.g. 3-Bedroom Apartment for Rent in Ikeja" : "e.g. 5-Bedroom Duplex for Sale in Lekki"}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -924,8 +1016,8 @@ export default function SellerPortalPage() {
                     onChange={(e) => setType(e.target.value as ListingType)}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="buy">For Sale (Buy)</option>
-                    <option value="rent">For Rent (Lease)</option>
+                    <option value="buy">For Sale</option>
+                    <option value="rent">For Rent</option>
                   </select>
                 </div>
 
@@ -948,7 +1040,7 @@ export default function SellerPortalPage() {
 
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold uppercase text-gray-700">
-                    Price in Naira (₦) *
+                    {type === "rent" ? "Annual Rent in Naira (₦) *" : "Sale Price in Naira (₦) *"}
                   </label>
                   <input
                     type="number"
@@ -956,7 +1048,7 @@ export default function SellerPortalPage() {
                     min={1000}
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
-                    placeholder="e.g. 180000000"
+                    placeholder={type === "rent" ? "e.g. 3500000" : "e.g. 180000000"}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -1040,7 +1132,8 @@ export default function SellerPortalPage() {
                 <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900">
                   Property Specs
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className={`grid grid-cols-2 ${isLand ? "sm:grid-cols-2" : "sm:grid-cols-5"} gap-3`}>
+                  {!isLand && <>
                   <div className="space-y-1">
                     <label className="block text-[11px] font-semibold text-gray-700">Bedrooms</label>
                     <input
@@ -1061,7 +1154,8 @@ export default function SellerPortalPage() {
                       className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                     />
                   </div>
-                  <div className="space-y-1">
+                  </>}
+                  {!isLand && <div className="space-y-1">
                     <label className="block text-[11px] font-semibold text-gray-700">Parking</label>
                     <input
                       type="number"
@@ -1070,9 +1164,9 @@ export default function SellerPortalPage() {
                       onChange={(e) => setParking(e.target.value)}
                       className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                     />
-                  </div>
+                  </div>}
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold text-gray-700">Area (sqft/sqm)</label>
+                    <label className="block text-[11px] font-semibold text-gray-700">{isLand ? "Plot Size (sqm)" : "Floor Area (sqft)"}</label>
                     <input
                       type="number"
                       min={0}
@@ -1081,7 +1175,7 @@ export default function SellerPortalPage() {
                       className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                     />
                   </div>
-                  <div className="space-y-1">
+                  {!isLand && <div className="space-y-1">
                     <label className="block text-[11px] font-semibold text-gray-700">Year Built</label>
                     <input
                       type="number"
@@ -1089,7 +1183,7 @@ export default function SellerPortalPage() {
                       onChange={(e) => setYearBuilt(e.target.value)}
                       className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
                     />
-                  </div>
+                  </div>}
                 </div>
               </div>
 
@@ -1102,13 +1196,13 @@ export default function SellerPortalPage() {
                   rows={4}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the architectural highlights, finishings, power status, security, title documents (Governor's Consent, C of O), etc."
+                  placeholder={isLand ? "Describe the plot size, road access, zoning, utilities, and title documents (C of O, Governor's Consent, deed, etc.)." : "Describe the layout, finishes, power, water, security, and title documents (C of O, Governor's Consent, etc.)."}
                   className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               {/* Amenities */}
-              <div className="border-t border-gray-100 pt-4 space-y-2">
+              {!isLand && <div className="border-t border-gray-100 pt-4 space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-900">
                   Select Amenities
                 </label>
@@ -1132,13 +1226,13 @@ export default function SellerPortalPage() {
                     );
                   })}
                 </div>
-              </div>
+              </div>}
 
               {/* Images */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-900">
-                    Property Images ({imageList.length})
+                    Upload Property Photos ({imageList.length})
                   </label>
                   <span className="text-[11px] text-gray-500">First image is used as cover</span>
                 </div>
@@ -1149,7 +1243,7 @@ export default function SellerPortalPage() {
                     <ImageIcon className="w-5 h-5 text-indigo-600" />
                     <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all">
                       <Upload className="w-3.5 h-3.5" />
-                      <span>Choose Photos from Device</span>
+                      <span>Choose House or Land Photos</span>
                       <input
                         type="file"
                         multiple
@@ -1161,7 +1255,7 @@ export default function SellerPortalPage() {
                     </label>
                   </div>
                   <p className="text-[11px] text-gray-500">
-                    Supports JPG, PNG, WebP up to 10MB each. Images are stored securely in Firebase Storage.
+                    Add one or more clear photos. JPG, PNG, WebP, or AVIF up to 10MB each.
                   </p>
                 </div>
 
@@ -1240,7 +1334,7 @@ export default function SellerPortalPage() {
                       <span>Saving to Firestore...</span>
                     </>
                   ) : (
-                    <span>{editingPropertyId ? "Save Changes" : "Publish Nigerian Listing"}</span>
+                    <span>{editingPropertyId ? "Save Changes" : "Publish Listing"}</span>
                   )}
                 </button>
               </div>

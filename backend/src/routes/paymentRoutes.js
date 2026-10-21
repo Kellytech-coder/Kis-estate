@@ -1,0 +1,11 @@
+const express = require("express");
+const { authenticate } = require("../middleware/authMiddleware");
+const { requireSellerOrAdmin } = require("../middleware/sellerMiddleware");
+const { getPlans, initializeCheckout, confirmCheckout, getSellerOrders } = require("../controller/paymentController");
+const router = express.Router();
+router.get("/plans", getPlans);
+router.use(authenticate, requireSellerOrAdmin);
+router.post("/checkout", initializeCheckout);
+router.post("/confirm", confirmCheckout);
+router.get("/orders", getSellerOrders);
+module.exports = router;

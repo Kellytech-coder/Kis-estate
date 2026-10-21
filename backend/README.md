@@ -41,3 +41,15 @@ The Next.js app uses `NEXT_PUBLIC_API_URL` as the API base URL. For local develo
 - `properties`: property listings
 - `inquiries`: property inquiries and tour requests
 - `contact_messages`: website contact form submissions
+- `plans`: server-owned promotion catalog (the featured plan is created from `FEATURED_PRICE_KOBO` on first read)
+- `orders`: seller promotion purchases and lifecycle status
+- `payments`: Paystack transaction records, failures, and refunds
+- `promotion_views`: promoted listing detail views grouped by order and UTC day
+
+## Featured promotion payments
+
+Set `PAYSTACK_SECRET_KEY` in the backend environment and set `FEATURED_PRICE_KOBO` to the default integer price in kobo (for example, `5000000` is ₦50,000). The first request creates the featured plan document. Admins can edit its NGN price, duration, and availability from **Admin → Revenue & Promotions**; each order keeps the price and duration it was purchased with. Configure the Paystack webhook URL as `https://<your-api-host>/api/payments/webhook` and subscribe to `charge.success`, `charge.failed`, `refund.pending`, and `refund.processed`.
+
+Seller checkout creates an order, initializes Paystack from the backend, and only marks the property featured after a Paystack server verification confirms the exact reference, amount, and currency. The seller callback is only a UX signal; it does not grant promotion. The purchased duration is stored on each order, and public listing APIs stop returning `featured: true` after `featuredUntil`. Property detail views are counted once per browser session, and promoted views are grouped by order. Publish updated `firestore.rules` so browser clients cannot set featured status or dates directly.
+
+Admin payment reporting is available at `GET /api/admin/payments`; **Admin → Revenue & Promotions** includes promotion pricing, net revenue, paid/failed/refunded orders, paying seller conversion, promoted detail views, and inquiries during each promotion. Buyer browsing and inquiries and basic seller listings remain free. This marketplace does not yet track completed sale or lease transactions, so referral commissions or closing fees are not charged. Recurring seller subscriptions can be added if higher listing limits or ongoing seller tools become part of the product.

@@ -9,6 +9,13 @@ const isInquiryOwnerOrAdmin = (data, req) => {
   return isAdmin || isOwner;
 };
 
+const isSellerRole = (req) => ["SELLER", "SELLER_PROPERTY_OWNER"].includes((req.userProfile?.role || "").toUpperCase());
+const ownsInquiryProperty = async (propertyId, uid) => {
+  if (!propertyId || !uid) return false;
+  const property = await db.collection("properties").doc(propertyId).get();
+  return property.exists && [property.data().createdById, property.data().sellerId].includes(uid);
+};
+
 const formatInquiryDoc = (doc) => {
   const data = doc.data();
   const createdAt =
@@ -46,7 +53,14 @@ const getInquiries = async (req, res, next) => {
     let data = snapshot.docs.map(formatInquiryDoc);
 
     // If not admin, filter by user's own inquiries or email
-    if (!isAdmin && userId) {
+    if (isSellerRole(req) && userId) {
+      const [createdProperties, sellerProperties] = await Promise.all([
+        db.collection("properties").where("createdById", "==", userId).get(),
+        db.collection("properties").where("sellerId", "==", userId).get(),
+      ]);
+      const ownPropertyIds = new Set([...createdProperties.docs, ...sellerProperties.docs].map((doc) => doc.id));
+      data = data.filter((inquiry) => ownPropertyIds.has(inquiry.propertyId));
+    } else if (!isAdmin && userId) {
       const userEmail = req.user?.email?.toLowerCase();
       data = data.filter(
         (inq) =>
@@ -85,7 +99,8 @@ const getInquiry = async (req, res, next) => {
       });
     }
 
-    if (!isInquiryOwnerOrAdmin(doc.data(), req)) {
+    const sellerCanView = isSellerRole(req) && await ownsInquiryProperty(doc.data().propertyId, req.user.uid);
+    if (!isInquiryOwnerOrAdmin(doc.data(), req) && !sellerCanView) {
       return res.status(403).json({ success: false, message: "You are not authorized to view this inquiry" });
     }
 
@@ -149,10 +164,17 @@ const createInquiry = async (req, res, next) => {
       }
     }
 
+    let inquirySellerId = null;
+    try {
+      const propertyDoc = await db.collection("properties").doc(propertyId).get();
+      if (propertyDoc.exists) inquirySellerId = propertyDoc.data().createdById || propertyDoc.data().sellerId || null;
+    } catch { /* Keep accepting the inquiry if legacy property data is unavailable. */ }
+
     const ref = inquiries.doc();
 
     const newInquiry = {
       propertyId,
+      sellerId: inquirySellerId,
       propertyTitle: finalPropertyTitle,
       propertyImage: finalPropertyImage,
       userName: resolvedName.trim(),
@@ -198,12 +220,13 @@ const updateInquiry = async (req, res, next) => {
     }
 
     const isAdmin = (req.userProfile?.role || "").toUpperCase() === "ADMIN";
-    if (!isInquiryOwnerOrAdmin(snapshot.data(), req)) {
+    const sellerCanManage = isSellerRole(req) && await ownsInquiryProperty(snapshot.data().propertyId, req.user.uid);
+    if (!isInquiryOwnerOrAdmin(snapshot.data(), req) && !sellerCanManage) {
       return res.status(403).json({ success: false, message: "You are not authorized to update this inquiry" });
     }
 
     const updates = {};
-    if (req.body.status && isAdmin) {
+    if (req.body.status && (isAdmin || sellerCanManage)) {
       const allowedStatuses = ["pending", "confirmed", "completed", "cancelled"];
       const status = String(req.body.status).toLowerCase();
       if (!allowedStatuses.includes(status)) {
